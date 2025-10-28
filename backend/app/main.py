@@ -241,7 +241,7 @@ async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], 
                         if existing:
                             continue
                         
-                        # Créer la mention
+                        # Créer la mention - CORRECTION ICI: metadata -> mention_metadata
                         mention = Mention(
                             keyword_id=keyword.id,
                             source=mention_data['source'],
@@ -251,7 +251,7 @@ async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], 
                             author=mention_data['author'],
                             engagement_score=mention_data['engagement_score'],
                             published_at=mention_data['published_at'],
-                            metadata=json.dumps(mention_data.get('metadata', {}))
+                            mention_metadata=json.dumps(mention_data.get('metadata', {}))
                         )
                         
                         db.add(mention)

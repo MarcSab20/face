@@ -42,8 +42,8 @@ class Mention(Base):
     published_at = Column(DateTime, nullable=True)
     collected_at = Column(DateTime, default=datetime.utcnow)
     
-    # Metadata
-    metadata = Column(Text)  # JSON pour infos spécifiques à la source
+    # Metadata (renamed to avoid SQLAlchemy reserved word)
+    mention_metadata = Column(Text)  # JSON pour infos spécifiques à la source
     
     keyword_obj = relationship("Keyword", back_populates="mentions")
     
