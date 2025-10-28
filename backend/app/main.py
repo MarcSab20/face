@@ -1,6 +1,7 @@
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import func, and_, or_
 from typing import List, Optional
 from datetime import datetime, timedelta
 import logging
@@ -15,6 +16,7 @@ from app.collectors.youtube_collector import YouTubeCollector
 from app.collectors.tiktok_collector import TikTokCollector
 from app.collectors.google_search_collector import GoogleSearchCollector
 from app.collectors.google_alerts_collector import GoogleAlertsCollector
+from app.sentiment_analyzer import SentimentAnalyzer
 
 from pydantic import BaseModel
 
@@ -25,11 +27,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Initialiser l'analyseur de sentiment
+sentiment_analyzer = SentimentAnalyzer()
+
 # Initialisation FastAPI
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Système de surveillance des mentions en ligne"
+    description="Système de surveillance des mentions en ligne avec analyse de sentiment"
 )
 
 # CORS
@@ -73,6 +78,7 @@ class MentionResponse(BaseModel):
     content: str
     author: str
     engagement_score: float
+    sentiment: Optional[str]
     published_at: Optional[datetime]
     collected_at: datetime
     
@@ -89,6 +95,14 @@ class StatsResponse(BaseModel):
     mentions_today: int
     mentions_by_source: dict
     top_keywords: List[dict]
+    sentiment_distribution: Optional[dict] = None
+
+class AdvancedStatsResponse(BaseModel):
+    timeline: List[dict]
+    sentiment_by_source: dict
+    top_engaged: List[dict]
+    hourly_distribution: List[dict]
+    daily_distribution: List[dict]
 
 # ============ Routes API ============
 
@@ -98,7 +112,8 @@ async def root():
     return {
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "status": "running"
+        "status": "running",
+        "features": ["sentiment_analysis", "advanced_stats", "filters"]
     }
 
 @app.get("/health")
@@ -112,12 +127,10 @@ async def health_check():
 async def create_keyword(keyword_data: KeywordCreate, db: Session = Depends(get_db)):
     """Créer un nouveau mot-clé à surveiller"""
     
-    # Vérifier si le mot-clé existe déjà
     existing = db.query(Keyword).filter(Keyword.keyword == keyword_data.keyword).first()
     if existing:
         raise HTTPException(status_code=400, detail="Ce mot-clé existe déjà")
     
-    # Créer le mot-clé
     keyword = Keyword(
         keyword=keyword_data.keyword,
         sources=json.dumps(keyword_data.sources),
@@ -166,6 +179,64 @@ async def delete_keyword(keyword_id: int, db: Session = Depends(get_db)):
     logger.info(f"Mot-clé supprimé: {keyword.keyword}")
     return {"message": "Mot-clé supprimé avec succès"}
 
+# ===== Analyse de sentiment =====
+
+@app.post("/api/analyze-sentiment/{mention_id}")
+async def analyze_mention_sentiment(mention_id: int, db: Session = Depends(get_db)):
+    """Analyser le sentiment d'une mention spécifique"""
+    mention = db.query(Mention).filter(Mention.id == mention_id).first()
+    
+    if not mention:
+        raise HTTPException(status_code=404, detail="Mention non trouvée")
+    
+    # Analyser le sentiment
+    text = f"{mention.title} {mention.content}"
+    analysis = sentiment_analyzer.analyze(text)
+    
+    # Mettre à jour la mention
+    mention.sentiment = analysis['sentiment']
+    db.commit()
+    
+    return {
+        "mention_id": mention_id,
+        "sentiment": analysis['sentiment'],
+        "score": analysis['score'],
+        "details": analysis
+    }
+
+@app.post("/api/analyze-all-sentiments")
+async def analyze_all_sentiments(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Analyser le sentiment de toutes les mentions sans sentiment"""
+    mentions_without_sentiment = db.query(Mention).filter(
+        or_(Mention.sentiment == None, Mention.sentiment == '')
+    ).all()
+    
+    if not mentions_without_sentiment:
+        return {"message": "Toutes les mentions ont déjà un sentiment", "count": 0}
+    
+    background_tasks.add_task(process_sentiment_analysis, mentions_without_sentiment, db)
+    
+    return {
+        "message": "Analyse de sentiment lancée en arrière-plan",
+        "count": len(mentions_without_sentiment)
+    }
+
+def process_sentiment_analysis(mentions: List[Mention], db: Session):
+    """Traiter l'analyse de sentiment en arrière-plan"""
+    for mention in mentions:
+        try:
+            text = f"{mention.title} {mention.content}"
+            analysis = sentiment_analyzer.analyze(text)
+            mention.sentiment = analysis['sentiment']
+            db.commit()
+        except Exception as e:
+            logger.error(f"Erreur analyse sentiment mention {mention.id}: {e}")
+    
+    logger.info(f"Analyse de sentiment terminée pour {len(mentions)} mentions")
+
 # ===== Collecte de données =====
 
 @app.post("/api/collect")
@@ -176,7 +247,6 @@ async def collect_mentions(
 ):
     """Lancer une collecte de mentions"""
     
-    # Déterminer les mots-clés à collecter
     if request.keyword_id:
         keywords = [db.query(Keyword).filter(Keyword.id == request.keyword_id).first()]
         if not keywords[0]:
@@ -187,7 +257,6 @@ async def collect_mentions(
     if not keywords:
         raise HTTPException(status_code=400, detail="Aucun mot-clé actif à collecter")
     
-    # Lancer la collecte en arrière-plan
     background_tasks.add_task(run_collection, keywords, request.sources, db)
     
     return {
@@ -199,7 +268,6 @@ async def collect_mentions(
 async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], db: Session):
     """Exécuter la collecte pour les mots-clés donnés"""
     
-    # Initialiser les collecteurs
     collectors = {
         'rss': RSSCollector(),
         'reddit': RedditCollector(),
@@ -223,17 +291,14 @@ async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], 
             collector = collectors[source_name]
             
             try:
-                # Collecter les mentions
                 mentions_data = collector.collect(
                     keyword.keyword,
                     max_results=settings.MAX_RESULTS_PER_SOURCE
                 )
                 
-                # Sauvegarder les mentions
                 saved_count = 0
                 for mention_data in mentions_data:
                     try:
-                        # Vérifier si la mention existe déjà
                         existing = db.query(Mention).filter(
                             Mention.source_url == mention_data['source_url']
                         ).first()
@@ -241,7 +306,10 @@ async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], 
                         if existing:
                             continue
                         
-                        # Créer la mention - CORRECTION ICI: metadata -> mention_metadata
+                        # Analyser le sentiment immédiatement
+                        text = f"{mention_data['title']} {mention_data['content']}"
+                        sentiment_analysis = sentiment_analyzer.analyze(text)
+                        
                         mention = Mention(
                             keyword_id=keyword.id,
                             source=mention_data['source'],
@@ -251,6 +319,7 @@ async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], 
                             author=mention_data['author'],
                             engagement_score=mention_data['engagement_score'],
                             published_at=mention_data['published_at'],
+                            sentiment=sentiment_analysis['sentiment'],
                             mention_metadata=json.dumps(mention_data.get('metadata', {}))
                         )
                         
@@ -263,7 +332,6 @@ async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], 
                 
                 db.commit()
                 
-                # Log de la collecte
                 execution_time = (datetime.utcnow() - start_time).total_seconds()
                 
                 log_entry = CollectionLog(
@@ -294,30 +362,60 @@ async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], 
                 db.add(log_entry)
                 db.commit()
         
-        # Mettre à jour la date de dernière collecte
         keyword.last_collected = datetime.utcnow()
         db.commit()
 
-# ===== Mentions =====
+# ===== Mentions avec filtres avancés =====
 
 @app.get("/api/mentions", response_model=List[MentionResponse])
 async def get_mentions(
     keyword: Optional[str] = None,
     source: Optional[str] = None,
+    sentiment: Optional[str] = Query(None, regex="^(positive|negative|neutral)$"),
+    min_engagement: Optional[float] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    search: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
     db: Session = Depends(get_db)
 ):
-    """Obtenir les mentions"""
+    """Obtenir les mentions avec filtres avancés"""
     query = db.query(Mention)
     
+    # Filtre par mot-clé
     if keyword:
         keyword_obj = db.query(Keyword).filter(Keyword.keyword == keyword).first()
         if keyword_obj:
             query = query.filter(Mention.keyword_id == keyword_obj.id)
     
+    # Filtre par source
     if source:
         query = query.filter(Mention.source == source)
+    
+    # Filtre par sentiment
+    if sentiment:
+        query = query.filter(Mention.sentiment == sentiment)
+    
+    # Filtre par engagement minimum
+    if min_engagement is not None:
+        query = query.filter(Mention.engagement_score >= min_engagement)
+    
+    # Filtre par date
+    if date_from:
+        query = query.filter(Mention.published_at >= date_from)
+    if date_to:
+        query = query.filter(Mention.published_at <= date_to)
+    
+    # Recherche textuelle
+    if search:
+        search_pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                Mention.title.ilike(search_pattern),
+                Mention.content.ilike(search_pattern)
+            )
+        )
     
     mentions = query.order_by(Mention.published_at.desc()).offset(offset).limit(limit).all()
     
@@ -333,7 +431,7 @@ async def get_mention(mention_id: int, db: Session = Depends(get_db)):
     
     return mention
 
-# ===== Statistiques =====
+# ===== Statistiques de base =====
 
 @app.get("/api/stats", response_model=StatsResponse)
 async def get_stats(db: Session = Depends(get_db)):
@@ -349,7 +447,6 @@ async def get_stats(db: Session = Depends(get_db)):
     ).count()
     
     # Mentions par source
-    from sqlalchemy import func
     mentions_by_source = dict(
         db.query(Mention.source, func.count(Mention.id))
         .group_by(Mention.source)
@@ -369,12 +466,121 @@ async def get_stats(db: Session = Depends(get_db)):
         for kw, count in top_keywords_query
     ]
     
+    # Distribution des sentiments
+    sentiment_dist = dict(
+        db.query(Mention.sentiment, func.count(Mention.id))
+        .filter(Mention.sentiment != None)
+        .group_by(Mention.sentiment)
+        .all()
+    )
+    
     return StatsResponse(
         total_keywords=total_keywords,
         total_mentions=total_mentions,
         mentions_today=mentions_today,
         mentions_by_source=mentions_by_source,
-        top_keywords=top_keywords
+        top_keywords=top_keywords,
+        sentiment_distribution=sentiment_dist
+    )
+
+# ===== Statistiques avancées =====
+
+@app.get("/api/stats/advanced", response_model=AdvancedStatsResponse)
+async def get_advanced_stats(
+    days: int = Query(7, ge=1, le=90),
+    db: Session = Depends(get_db)
+):
+    """Obtenir des statistiques avancées"""
+    
+    # Date de début
+    start_date = datetime.utcnow() - timedelta(days=days)
+    
+    # Timeline (évolution temporelle)
+    timeline_query = db.query(
+        func.date(Mention.published_at).label('date'),
+        func.count(Mention.id).label('count')
+    ).filter(
+        Mention.published_at >= start_date
+    ).group_by(
+        func.date(Mention.published_at)
+    ).order_by('date').all()
+    
+    timeline = [
+        {"date": str(date), "count": count}
+        for date, count in timeline_query
+    ]
+    
+    # Sentiment par source
+    sentiment_by_source_query = db.query(
+        Mention.source,
+        Mention.sentiment,
+        func.count(Mention.id).label('count')
+    ).filter(
+        Mention.published_at >= start_date,
+        Mention.sentiment != None
+    ).group_by(
+        Mention.source,
+        Mention.sentiment
+    ).all()
+    
+    sentiment_by_source = {}
+    for source, sentiment, count in sentiment_by_source_query:
+        if source not in sentiment_by_source:
+            sentiment_by_source[source] = {}
+        sentiment_by_source[source][sentiment] = count
+    
+    # Top mentions engageantes
+    top_engaged_query = db.query(Mention).filter(
+        Mention.published_at >= start_date
+    ).order_by(
+        Mention.engagement_score.desc()
+    ).limit(10).all()
+    
+    top_engaged = [
+        {
+            "id": m.id,
+            "title": m.title,
+            "source": m.source,
+            "engagement": m.engagement_score,
+            "sentiment": m.sentiment,
+            "url": m.source_url
+        }
+        for m in top_engaged_query
+    ]
+    
+    # Distribution horaire
+    hourly_query = db.query(
+        func.extract('hour', Mention.published_at).label('hour'),
+        func.count(Mention.id).label('count')
+    ).filter(
+        Mention.published_at >= start_date
+    ).group_by('hour').order_by('hour').all()
+    
+    hourly_distribution = [
+        {"hour": int(hour), "count": count}
+        for hour, count in hourly_query
+    ]
+    
+    # Distribution par jour de la semaine
+    daily_query = db.query(
+        func.extract('dow', Mention.published_at).label('dow'),
+        func.count(Mention.id).label('count')
+    ).filter(
+        Mention.published_at >= start_date
+    ).group_by('dow').order_by('dow').all()
+    
+    days_names = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
+    daily_distribution = [
+        {"day": days_names[int(dow)], "count": count}
+        for dow, count in daily_query
+    ]
+    
+    return AdvancedStatsResponse(
+        timeline=timeline,
+        sentiment_by_source=sentiment_by_source,
+        top_engaged=top_engaged,
+        hourly_distribution=hourly_distribution,
+        daily_distribution=daily_distribution
     )
 
 # ===== Configuration =====

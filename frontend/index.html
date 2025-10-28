@@ -3,14 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Brand Monitor - Dashboard</title>
+    <title>Brand Monitor - Dashboard Pro</title>
     <link rel="stylesheet" href="styles.css">
+    <!-- Chart.js pour les graphiques -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>🔍 Brand Monitor</h1>
-            <p class="subtitle">Surveillance des mentions en ligne</p>
+            <h1>🔍 Brand Monitor Pro</h1>
+            <p class="subtitle">Surveillance intelligente avec analyse de sentiment</p>
         </header>
 
         <!-- Statistiques -->
@@ -27,12 +29,62 @@
                 <h3>Aujourd'hui</h3>
                 <p class="stat-value" id="mentionsToday">0</p>
             </div>
+            <div class="stat-card sentiment-card">
+                <h3>Sentiment</h3>
+                <div class="sentiment-stats">
+                    <div class="sentiment-item positive">
+                        <span class="emoji">😊</span>
+                        <span id="positiveCount">0</span>
+                    </div>
+                    <div class="sentiment-item neutral">
+                        <span class="emoji">😐</span>
+                        <span id="neutralCount">0</span>
+                    </div>
+                    <div class="sentiment-item negative">
+                        <span class="emoji">😞</span>
+                        <span id="negativeCount">0</span>
+                    </div>
+                </div>
+            </div>
         </section>
 
-        <!-- Sources par mentions -->
+        <!-- Graphiques avancés -->
         <section class="section">
-            <h2>📊 Mentions par source</h2>
-            <div id="sourceChart" class="chart"></div>
+            <h2>📊 Visualisations</h2>
+            
+            <div class="charts-grid">
+                <!-- Timeline -->
+                <div class="chart-container">
+                    <h3>Évolution temporelle (7 derniers jours)</h3>
+                    <canvas id="timelineChart"></canvas>
+                </div>
+                
+                <!-- Sentiment distribution -->
+                <div class="chart-container">
+                    <h3>Répartition des sentiments</h3>
+                    <canvas id="sentimentChart"></canvas>
+                </div>
+                
+                <!-- Sources -->
+                <div class="chart-container">
+                    <h3>Mentions par source</h3>
+                    <canvas id="sourcesChart"></canvas>
+                </div>
+                
+                <!-- Sentiment par source -->
+                <div class="chart-container">
+                    <h3>Sentiment par source</h3>
+                    <canvas id="sentimentBySourceChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Top mentions engageantes -->
+        <section class="section">
+            <h2>🔥 Top Mentions Engageantes</h2>
+            <div id="topEngaged" class="top-engaged-list">
+                <p class="loading">Chargement...</p>
+            </div>
         </section>
 
         <!-- Gestion des mots-clés -->
@@ -57,45 +109,109 @@
 
         <!-- Bouton de collecte -->
         <section class="section">
-            <h2>⚡ Collecte</h2>
-            <button onclick="startCollection()" class="btn btn-success btn-large" id="collectBtn">
-                Lancer la collecte
-            </button>
-            <p class="help-text">Collecte les dernières mentions pour tous les mots-clés actifs</p>
+            <h2>⚡ Collecte & Analyse</h2>
+            <div class="action-buttons">
+                <button onclick="startCollection()" class="btn btn-success btn-large" id="collectBtn">
+                    Lancer la collecte
+                </button>
+                <button onclick="analyzeSentiments()" class="btn btn-info btn-large" id="analyzeBtn">
+                    Analyser les sentiments
+                </button>
+            </div>
+            <p class="help-text">La collecte inclut l'analyse automatique de sentiment</p>
+        </section>
+
+        <!-- Filtres avancés -->
+        <section class="section">
+            <h2>🔍 Filtres Avancés</h2>
+            
+            <div class="advanced-filters">
+                <!-- Ligne 1 -->
+                <div class="filter-row">
+                    <select id="keywordFilter" onchange="loadMentions()" class="input filter-input">
+                        <option value="">Tous les mots-clés</option>
+                    </select>
+                    
+                    <select id="sourceFilter" onchange="loadMentions()" class="input filter-input">
+                        <option value="">Toutes les sources</option>
+                        <option value="rss">RSS</option>
+                        <option value="reddit">Reddit</option>
+                        <option value="youtube">YouTube</option>
+                        <option value="tiktok">TikTok</option>
+                        <option value="google_search">Google Search</option>
+                        <option value="google_alerts">Google Alerts</option>
+                    </select>
+                    
+                    <select id="sentimentFilter" onchange="loadMentions()" class="input filter-input">
+                        <option value="">Tous les sentiments</option>
+                        <option value="positive">😊 Positif</option>
+                        <option value="neutral">😐 Neutre</option>
+                        <option value="negative">😞 Négatif</option>
+                    </select>
+                </div>
+                
+                <!-- Ligne 2 -->
+                <div class="filter-row">
+                    <select id="periodFilter" onchange="applyPeriodFilter()" class="input filter-input">
+                        <option value="">Toute la période</option>
+                        <option value="today">Aujourd'hui</option>
+                        <option value="week">7 derniers jours</option>
+                        <option value="month">30 derniers jours</option>
+                        <option value="custom">Période personnalisée</option>
+                    </select>
+                    
+                    <input type="datetime-local" id="dateFrom" class="input filter-input" placeholder="Date début">
+                    <input type="datetime-local" id="dateTo" class="input filter-input" placeholder="Date fin">
+                    
+                    <select id="engagementFilter" onchange="loadMentions()" class="input filter-input">
+                        <option value="">Tout engagement</option>
+                        <option value="100">≥ 100</option>
+                        <option value="1000">≥ 1,000</option>
+                        <option value="10000">≥ 10,000</option>
+                    </select>
+                </div>
+                
+                <!-- Ligne 3 -->
+                <div class="filter-row">
+                    <input type="text" id="searchFilter" placeholder="Rechercher dans le contenu..." class="input filter-input search-input">
+                    <button onclick="loadMentions()" class="btn btn-primary">Appliquer</button>
+                    <button onclick="resetFilters()" class="btn">Réinitialiser</button>
+                </div>
+            </div>
         </section>
 
         <!-- Mentions récentes -->
         <section class="section">
-            <h2>📰 Mentions récentes</h2>
+            <h2>📰 Mentions</h2>
             
-            <div class="filters">
-                <select id="sourceFilter" onchange="loadMentions()" class="input">
-                    <option value="">Toutes les sources</option>
-                    <option value="rss">RSS</option>
-                    <option value="reddit">Reddit</option>
-                    <option value="youtube">YouTube</option>
-                    <option value="tiktok">TikTok</option>
-                    <option value="google_search">Google Search</option>
-                    <option value="google_alerts">Google Alerts</option>
-                </select>
-                
-                <select id="keywordFilter" onchange="loadMentions()" class="input">
-                    <option value="">Tous les mots-clés</option>
-                </select>
-
-                <button onclick="loadMentions()" class="btn">Actualiser</button>
+            <div class="mentions-header">
+                <div class="mentions-count">
+                    <span id="mentionsCount">0</span> résultats
+                </div>
+                <div class="mentions-sort">
+                    <select id="sortBy" onchange="loadMentions()" class="input">
+                        <option value="date">Plus récent</option>
+                        <option value="engagement">Plus engageant</option>
+                    </select>
+                </div>
             </div>
 
             <div id="mentionsList" class="mentions-list">
                 <p class="loading">Chargement des mentions...</p>
             </div>
+            
+            <div class="load-more">
+                <button onclick="loadMoreMentions()" class="btn" id="loadMoreBtn">
+                    Charger plus
+                </button>
+            </div>
         </section>
 
         <footer>
-            <p>Brand Monitor v1.0 - Surveillance gratuite des mentions en ligne</p>
+            <p>Brand Monitor Pro v2.0 - Surveillance intelligente avec analyse de sentiment</p>
             <p>
                 <a href="http://localhost:8000/docs" target="_blank">Documentation API</a> |
-                <a href="https://github.com" target="_blank">GitHub</a>
+                <a href="#" onclick="exportData()">Exporter les données</a>
             </p>
         </footer>
     </div>

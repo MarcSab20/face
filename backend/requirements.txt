@@ -27,6 +27,10 @@ python-dateutil==2.8.2
 lxml==5.1.0
 html5lib==1.1
 
+# Analyse de sentiment - NOUVEAU
+vaderSentiment==3.3.2
+textblob==0.17.1
+
 # Utilitaires
 pytz==2023.3
 
