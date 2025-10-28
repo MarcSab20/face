@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brand Monitor - Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 Brand Monitor</h1>
+            <p class="subtitle">Surveillance des mentions en ligne</p>
+        </header>
+
+        <!-- Statistiques -->
+        <section class="stats" id="stats">
+            <div class="stat-card">
+                <h3>Mots-clés</h3>
+                <p class="stat-value" id="totalKeywords">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Mentions totales</h3>
+                <p class="stat-value" id="totalMentions">0</p>
+            </div>
+            <div class="stat-card">
+                <h3>Aujourd'hui</h3>
+                <p class="stat-value" id="mentionsToday">0</p>
+            </div>
+        </section>
+
+        <!-- Sources par mentions -->
+        <section class="section">
+            <h2>📊 Mentions par source</h2>
+            <div id="sourceChart" class="chart"></div>
+        </section>
+
+        <!-- Gestion des mots-clés -->
+        <section class="section">
+            <h2>🔑 Mots-clés surveillés</h2>
+            
+            <div class="form-group">
+                <input type="text" id="keywordInput" placeholder="Entrez un mot-clé..." class="input">
+                <div class="sources-selection">
+                    <label><input type="checkbox" name="source" value="rss" checked> RSS</label>
+                    <label><input type="checkbox" name="source" value="reddit" checked> Reddit</label>
+                    <label><input type="checkbox" name="source" value="youtube" checked> YouTube</label>
+                    <label><input type="checkbox" name="source" value="tiktok"> TikTok</label>
+                    <label><input type="checkbox" name="source" value="google_search"> Google Search</label>
+                    <label><input type="checkbox" name="source" value="google_alerts"> Google Alerts</label>
+                </div>
+                <button onclick="addKeyword()" class="btn btn-primary">Ajouter</button>
+            </div>
+
+            <div id="keywordsList" class="keywords-list"></div>
+        </section>
+
+        <!-- Bouton de collecte -->
+        <section class="section">
+            <h2>⚡ Collecte</h2>
+            <button onclick="startCollection()" class="btn btn-success btn-large" id="collectBtn">
+                Lancer la collecte
+            </button>
+            <p class="help-text">Collecte les dernières mentions pour tous les mots-clés actifs</p>
+        </section>
+
+        <!-- Mentions récentes -->
+        <section class="section">
+            <h2>📰 Mentions récentes</h2>
+            
+            <div class="filters">
+                <select id="sourceFilter" onchange="loadMentions()" class="input">
+                    <option value="">Toutes les sources</option>
+                    <option value="rss">RSS</option>
+                    <option value="reddit">Reddit</option>
+                    <option value="youtube">YouTube</option>
+                    <option value="tiktok">TikTok</option>
+                    <option value="google_search">Google Search</option>
+                    <option value="google_alerts">Google Alerts</option>
+                </select>
+                
+                <select id="keywordFilter" onchange="loadMentions()" class="input">
+                    <option value="">Tous les mots-clés</option>
+                </select>
+
+                <button onclick="loadMentions()" class="btn">Actualiser</button>
+            </div>
+
+            <div id="mentionsList" class="mentions-list">
+                <p class="loading">Chargement des mentions...</p>
+            </div>
+        </section>
+
+        <footer>
+            <p>Brand Monitor v1.0 - Surveillance gratuite des mentions en ligne</p>
+            <p>
+                <a href="http://localhost:8000/docs" target="_blank">Documentation API</a> |
+                <a href="https://github.com" target="_blank">GitHub</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
