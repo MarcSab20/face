@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom';
-import Sidebar from './Sidebar';
+import Sidebar from '../ui/Sidebar';
 import { Toaster } from 'react-hot-toast';
 
 export default function Layout() {
