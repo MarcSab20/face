@@ -8,6 +8,9 @@ from .youtube_collector import YouTubeCollector
 from .tiktok_collector import TikTokCollector
 from .google_search_collector import GoogleSearchCollector
 from .google_alerts_collector import GoogleAlertsCollector
+from .mastodon_collector import MastodonCollector
+from .bluesky_collector import BlueskyCollector
+from .telegram_collector import TelegramCollector
 
 __all__ = [
     'RSSCollector',
@@ -15,5 +18,8 @@ __all__ = [
     'YouTubeCollector',
     'TikTokCollector',
     'GoogleSearchCollector',
-    'GoogleAlertsCollector'
+    'GoogleAlertsCollector',
+    'MastodonCollector',
+    'BlueskyCollector',
+    'TelegramCollector'
 ]

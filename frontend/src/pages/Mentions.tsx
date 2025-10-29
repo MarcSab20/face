@@ -31,7 +31,7 @@ const SENTIMENT_OPTIONS = [
   { value: 'negative', label: '😞 Négatif' },
 ];
 
-const SOURCES = ['rss', 'reddit', 'youtube', 'tiktok', 'google_search', 'google_alerts'];
+const SOURCES = ['rss', 'reddit', 'youtube', 'tiktok', 'google_search', 'google_alerts', 'mastodon', 'bluesky', 'telegram'];
 
 export default function Mentions() {
   const { mentions, setMentions, keywords, filters, setFilters, resetFilters, setLoading } =

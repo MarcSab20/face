@@ -13,11 +13,13 @@ from app.models import Keyword, Mention, CollectionLog
 from app.collectors.rss_collector import RSSCollector
 from app.collectors.reddit_collector import RedditCollector
 from app.collectors.youtube_collector import YouTubeCollector
-from app.collectors.tiktok_collector import TikTokCollector
+from app.collectors.tiktok_collector import Collector
 from app.collectors.google_search_collector import GoogleSearchCollector
 from app.collectors.google_alerts_collector import GoogleAlertsCollector
 from app.sentiment_analyzer import SentimentAnalyzer
-
+from app.collectors.mastodon_collector import MastodonCollector
+from app.collectors.bluesky_collector import BlueskyCollector
+from app.collectors.telegram_collector import TelegramCollector
 from pydantic import BaseModel
 
 # Configuration du logging
@@ -274,7 +276,10 @@ async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], 
         'youtube': YouTubeCollector(),
         'tiktok': TikTokCollector(),
         'google_search': GoogleSearchCollector(),
-        'google_alerts': GoogleAlertsCollector()
+        'google_alerts': GoogleAlertsCollector(),
+        'mastodon': MastodonCollector(),
+        'bluesky': BlueskyCollector(),
+        'telegram': TelegramCollector()
     }
     
     for keyword in keywords:
@@ -629,6 +634,27 @@ async def get_available_sources():
                 "id": "google_alerts",
                 "name": "Google Alerts",
                 "description": "Alertes Google par email",
+                "free": True,
+                "limit": "Illimité"
+            },
+            {
+                "id": "mastodon",
+                "name": "Mastodon",
+                "description": "Réseau social décentralisé",
+                "free": True,
+                "limit": "Illimité"
+            },
+            {
+                "id": "bluesky",
+                "name": "Bluesky",
+                "description": "Nouveau réseau social",
+                "free": True,
+                "limit": "Illimité"
+            },
+            {
+                "id": "telegram",
+                "name": "Telegram",
+                "description": "Messages de canaux publics",
                 "free": True,
                 "limit": "Illimité"
             }

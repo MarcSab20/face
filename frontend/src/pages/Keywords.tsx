@@ -15,9 +15,7 @@ const AVAILABLE_SOURCES = [
   { id: 'instagram', name: 'Instagram', icon: '📷', color: 'bg-pink-500' },
   { id: 'facebook', name: 'Facebook', icon: '👍', color: 'bg-blue-600' },
   { id: 'linkedin', name: 'LinkedIn', icon: '💼', color: 'bg-blue-700' },
-  { id: 'telegram', name: 'Telegram', icon: '✈️', color: 'bg-blue-400' },
-  { id: 'discord', name: 'Discord', icon: '💬', color: 'bg-indigo-600' },
-  { id: 'medium', name: 'Medium', icon: '📝', color: 'bg-gray-800' },
+  { id: 'telegram', name: 'Telegram', icon: '✈️', color: 'bg-blue-400' }
 ];
 
 export default function Keywords() {

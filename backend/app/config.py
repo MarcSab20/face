@@ -17,6 +17,13 @@ class Settings(BaseSettings):
     REDDIT_USER_AGENT: str = os.getenv("REDDIT_USER_AGENT", "BrandMonitor/1.0")
     YOUTUBE_API_KEY: Optional[str] = os.getenv("YOUTUBE_API_KEY")
     
+    # Mastodon
+    MASTODON_INSTANCE_URL: str = os.getenv("MASTODON_INSTANCE_URL", "https://mastodon.social")
+    
+    # Telegram
+    TELEGRAM_API_ID: Optional[str] = os.getenv("TELEGRAM_API_ID")
+    TELEGRAM_API_HASH: Optional[str] = os.getenv("TELEGRAM_API_HASH")
+
     # SMTP pour alertes
     SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
