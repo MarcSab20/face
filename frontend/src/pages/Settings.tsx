@@ -15,7 +15,7 @@ import {
   AlertCircle,
   Info,
 } from 'lucide-react';
-import type { Source } from '@/types';
+import type { Source } from '@/types/index';
 import toast from 'react-hot-toast';
 
 export default function Settings() {

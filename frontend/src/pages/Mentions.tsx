@@ -21,7 +21,7 @@ import {
   getSourceIcon,
   getSourceColor,
 } from '@/lib/utils';
-import type { Mention, FilterOptions } from '@/types';
+import type { Mention, FilterOptions } from '@/types/index';
 import toast from 'react-hot-toast';
 
 const SENTIMENT_OPTIONS = [

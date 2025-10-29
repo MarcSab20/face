@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Keyword, Mention, Stats, AdvancedStats, FilterOptions, Source } from '@/types';
+import type { Keyword, Mention, Stats, AdvancedStats, FilterOptions, Source } from '@/types/index';
 
 interface AppState {
   // Data

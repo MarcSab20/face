@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useStore } from '@/store/useStore';
-import type { FilterOptions } from '@/types';
+import type { FilterOptions } from '@/types/index';
 
 // Hook pour la pagination
 export function usePagination<T>(items: T[], itemsPerPage: number = 20) {
@@ -332,7 +332,7 @@ export function useCountdown(initialSeconds: number) {
   const [isActive, setIsActive] = useState(false);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
     if (isActive && seconds > 0) {
       interval = setInterval(() => {

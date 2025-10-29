@@ -24,8 +24,11 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+
+    /* Type definitions */
+    "types": ["vite/client"]
   },
   "include": ["src"],
-  "references": [{ "path": "./tsconfig.json" }]
+  "exclude": ["node_modules"]
 }
