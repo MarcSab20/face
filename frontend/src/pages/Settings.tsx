@@ -96,7 +96,7 @@ export default function Settings() {
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Paramètres</h1>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Configurez votre application Brand Monitor
+          Configurez votre application Superviseur
         </p>
       </div>
 
@@ -302,7 +302,7 @@ function SourcesSettings({ sources }: SourcesSettingsProps) {
                     {source.name}
                   </h4>
                   {source.free && (
-                    <span className="badge badge-success text-xs">Gratuit</span>
+                    <span className="badge badge-success text-xs">Activée</span>
                   )}
                   {source.requiresAuth && (
                     <span className="badge badge-warning text-xs">API Required</span>
@@ -312,7 +312,7 @@ function SourcesSettings({ sources }: SourcesSettingsProps) {
                   {source.description}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-500">
-                  Limite: {source.limit}
+                  Limite actuelle: {source.limit}
                 </p>
               </div>
             </div>
@@ -333,18 +333,6 @@ function SourcesSettings({ sources }: SourcesSettingsProps) {
         ))}
       </div>
 
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <div className="flex items-start space-x-3">
-          <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-900 dark:text-blue-200">
-            <p className="font-medium mb-1">Configuration des API</p>
-            <p>
-              Pour activer certaines sources, vous devez configurer les clés API dans la
-              section Sécurité ci-dessous.
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -515,26 +503,6 @@ function SecuritySettings({ settings, onSettingChange }: SecuritySettingsProps) 
           className="input max-w-md"
         />
       </SettingItem>
-
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <div className="flex items-start space-x-3">
-          <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-900 dark:text-blue-200">
-            <p className="font-medium mb-2">Comment obtenir vos clés API :</p>
-            <ul className="list-disc list-inside space-y-1">
-              <li>
-                <strong>Google:</strong> console.cloud.google.com
-              </li>
-              <li>
-                <strong>Reddit:</strong> reddit.com/prefs/apps
-              </li>
-              <li>
-                <strong>YouTube:</strong> console.cloud.google.com
-              </li>
-            </ul>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

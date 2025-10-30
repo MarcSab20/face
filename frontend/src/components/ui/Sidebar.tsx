@@ -55,9 +55,9 @@ export default function Sidebar() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Brand Monitor
+                  Superviseur
                 </h1>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Pro v2.0</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">MINDEF</p>
               </div>
             </div>
             <button
@@ -113,10 +113,10 @@ export default function Sidebar() {
             {/* User Info */}
             <div className="rounded-lg bg-gradient-to-br from-primary-50 to-secondary-50 dark:from-gray-800 dark:to-gray-700 p-4">
               <p className="text-sm font-medium text-gray-900 dark:text-white">
-                Compte Gratuit
+                Compte Actif
               </p>
               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                Sources illimitées
+                09 sources 
               </p>
             </div>
           </div>
@@ -133,7 +133,7 @@ export default function Sidebar() {
             <Menu className="h-6 w-6" />
           </button>
           <h1 className="text-lg font-bold text-gray-900 dark:text-white">
-            Brand Monitor
+            Superviseur
           </h1>
           <div className="w-10" /> {/* Spacer */}
         </div>

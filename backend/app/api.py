@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.database import get_db
-from app.services.email_service import EmailService
-from app.services.influencer_analyzer import InfluencerAnalyzer
-from app.services.geo_analyzer import GeoAnalyzer
+from app.email_service import EmailService
+from app.influencer_analyzer import InfluencerAnalyzer
+from app.geo_analyzer import GeoAnalyzer
 
 # Créer les routers
 email_router = APIRouter(prefix="/api/reports", tags=["reports"])

@@ -1,11 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Globe, TrendingUp, MapPin, Filter } from 'lucide-react';
+import { Globe, TrendingUp, MapPin } from 'lucide-react';
 import { Card, Badge, PageLoading, ErrorState } from '@/components/ui/index';
 import { formatNumber } from '@/lib/utils';
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+// ============ INTERFACES TYPESCRIPT ============
 
 interface CountryData {
   country_code: string;
@@ -25,6 +27,36 @@ interface HeatmapPoint {
   country_code: string;
 }
 
+interface SentimentDistribution {
+  positive: number;
+  neutral: number;
+  negative: number;
+}
+
+interface CountryTrends {
+  country_code: string;
+  country_name: string;
+  total_mentions: number;
+  sentiment_distribution: SentimentDistribution;
+  top_sources: Record<string, number>;
+  avg_engagement: number;
+}
+
+interface GeoDistributionResponse {
+  period_days: number;
+  keyword: string | null;
+  total_countries: number;
+  distribution: CountryData[];
+}
+
+interface HeatmapDataResponse {
+  period_days: number;
+  points: HeatmapPoint[];
+  total_points: number;
+}
+
+// ============ COMPOSANT PRINCIPAL ============
+
 export default function Geography() {
   const [days, setDays] = useState(30);
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
@@ -32,10 +64,10 @@ export default function Geography() {
   const leafletMapRef = useRef<any>(null);
 
   // Charger les données géographiques
-  const { data: geoData, isLoading, error } = useQuery({
+  const { data: geoData, isLoading, error } = useQuery<GeoDistributionResponse>({
     queryKey: ['geography', days],
     queryFn: async () => {
-      const response = await axios.get(
+      const response = await axios.get<GeoDistributionResponse>(
         `${API_BASE_URL}/api/geography/distribution?days=${days}`
       );
       return response.data;
@@ -43,10 +75,10 @@ export default function Geography() {
   });
 
   // Charger les données heatmap
-  const { data: heatmapData } = useQuery({
+  const { data: heatmapData } = useQuery<HeatmapDataResponse>({
     queryKey: ['heatmap', days],
     queryFn: async () => {
-      const response = await axios.get(
+      const response = await axios.get<HeatmapDataResponse>(
         `${API_BASE_URL}/api/geography/heatmap?days=${days}`
       );
       return response.data;
@@ -54,11 +86,11 @@ export default function Geography() {
   });
 
   // Charger les données d'un pays spécifique
-  const { data: countryTrends } = useQuery({
+  const { data: countryTrends } = useQuery<CountryTrends | null>({
     queryKey: ['countryTrends', selectedCountry, days],
     queryFn: async () => {
       if (!selectedCountry) return null;
-      const response = await axios.get(
+      const response = await axios.get<CountryTrends>(
         `${API_BASE_URL}/api/geography/country/${selectedCountry}?days=${days}`
       );
       return response.data;
@@ -66,96 +98,90 @@ export default function Geography() {
     enabled: !!selectedCountry,
   });
 
-  // Initialiser la carte Leaflet
-  useEffect(() => {
-    if (!mapRef.current || !heatmapData) return;
+    // Initialiser la carte Leaflet
+        
+    useEffect(() => {
+    if (!heatmapData) return;
 
-    // Charger Leaflet dynamiquement
     const initMap = async () => {
-      // Import Leaflet CSS
-      if (!document.querySelector('link[href*="leaflet.css"]')) {
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        document.head.appendChild(link);
-      }
+        // ✅ Vérification à l'intérieur de initMap
+        if (!mapRef.current) return;
 
-      // Import Leaflet.heat CSS
-      if (!document.querySelector('link[href*="leaflet-heat"]')) {
-        const heatLink = document.createElement('link');
-        heatLink.rel = 'stylesheet';
-        heatLink.href = 'https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js';
-        document.head.appendChild(heatLink);
-      }
+        try {
+        // Import Leaflet CSS
+        if (!document.querySelector('link[href*="leaflet.css"]')) {
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+            document.head.appendChild(link);
+        }
 
-      // Charger Leaflet
-      const L = await import('leaflet');
-      
-      // Détruire la carte existante
-      if (leafletMapRef.current) {
-        leafletMapRef.current.remove();
-      }
+        // Charger Leaflet dynamiquement
+        const L = (await import('leaflet')).default;
+        
+        // Détruire la carte existante
+        if (leafletMapRef.current) {
+            leafletMapRef.current.remove();
+        }
 
-      // Créer la carte
-      const map = L.map(mapRef.current).setView([20, 0], 2);
+        // ✅ Maintenant TypeScript sait que mapRef.current n'est pas null
+        const map = L.map(mapRef.current).setView([20, 0], 2);
 
-      // Ajouter le fond de carte
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors',
-        maxZoom: 18,
-      }).addTo(map);
-
-      // Ajouter les markers pour chaque pays
-      heatmapData.points.forEach((point: HeatmapPoint) => {
-        // Taille du marker selon l'intensité
-        const radius = 10 + (point.intensity * 30);
-        const opacity = 0.5 + (point.intensity * 0.5);
-
-        const circle = L.circleMarker([point.lat, point.lon], {
-          radius: radius,
-          fillColor: point.intensity > 0.7 ? '#ef4444' : point.intensity > 0.4 ? '#f59e0b' : '#10b981',
-          color: '#fff',
-          weight: 2,
-          opacity: 1,
-          fillOpacity: opacity,
+        // Ajouter le fond de carte
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 18,
         }).addTo(map);
 
-        // Popup
-        circle.bindPopup(`
-          <div style="font-family: sans-serif;">
-            <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: bold;">${point.country}</h3>
-            <p style="margin: 0; font-size: 14px;"><strong>${point.count}</strong> mentions</p>
-            <button 
-              onclick="window.selectCountry('${point.country_code}')"
-              style="margin-top: 8px; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;"
-            >
-              Voir détails →
-            </button>
-          </div>
-        `);
-      });
+        // Ajouter les markers pour chaque pays
+        heatmapData.points.forEach((point: HeatmapPoint) => {
+            const radius = 10 + (point.intensity * 30);
+            const opacity = 0.5 + (point.intensity * 0.5);
 
-      leafletMapRef.current = map;
+            const circle = L.circleMarker([point.lat, point.lon], {
+            radius: radius,
+            fillColor: point.intensity > 0.7 ? '#ef4444' : point.intensity > 0.4 ? '#f59e0b' : '#10b981',
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: opacity,
+            }).addTo(map);
+
+            circle.bindPopup(`
+            <div style="font-family: sans-serif;">
+                <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: bold;">${point.country}</h3>
+                <p style="margin: 0; font-size: 14px;"><strong>${point.count}</strong> mentions</p>
+                <button 
+                onclick="window.selectCountry('${point.country_code}')"
+                style="margin-top: 8px; padding: 6px 12px; background: #667eea; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 12px;"
+                >
+                Voir détails →
+                </button>
+            </div>
+            `);
+        });
+
+        leafletMapRef.current = map;
+        } catch (err) {
+        console.error('Erreur initialisation carte:', err);
+        }
     };
 
     initMap();
 
     // Fonction globale pour sélectionner un pays depuis le popup
     (window as any).selectCountry = (countryCode: string) => {
-      setSelectedCountry(countryCode);
+        setSelectedCountry(countryCode);
     };
-
     return () => {
-      if (leafletMapRef.current) {
+        if (leafletMapRef.current) {
         leafletMapRef.current.remove();
-      }
+        }
     };
-  }, [heatmapData]);
+    }, [heatmapData]);
 
   if (error) {
-    return (
-      <ErrorState message="Erreur de chargement des données géographiques" />
-    );
+    return <ErrorState message="Erreur de chargement des données géographiques" />;
   }
 
   if (isLoading) {
@@ -306,7 +332,7 @@ export default function Geography() {
         </div>
       </div>
 
-      {/* Détails du pays sélectionné */}
+      {/* Détails du pays sélectionné - CORRECTION ICI */}
       {selectedCountry && countryTrends && (
         <Card className="animate-fade-in">
           <div className="flex items-center justify-between mb-6">
@@ -401,7 +427,7 @@ export default function Geography() {
             </div>
           </div>
 
-          {/* Top sources */}
+          {/* Top sources - CORRECTION DU TYPAGE ICI */}
           <div className="mt-6">
             <h4 className="font-semibold text-gray-900 dark:text-white mb-3">
               Top Sources
@@ -416,7 +442,7 @@ export default function Geography() {
                     {source}
                   </p>
                   <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">
-                    {count}
+                    {count as number}
                   </p>
                 </div>
               ))}

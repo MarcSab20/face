@@ -9,7 +9,7 @@ from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime
 
 from app.database import SessionLocal
-from app.services.email_service import EmailService
+from app.email_service import EmailService
 from app.config import settings
 
 logger = logging.getLogger(__name__)
