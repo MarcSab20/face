@@ -6,6 +6,8 @@ import {
   BarChart3,
   Settings,
   X,
+  Users,
+  Globe,
   Menu,
   Moon,
   Sun,
@@ -17,6 +19,8 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Mots-clés', href: '/keywords', icon: Search },
   { name: 'Mentions', href: '/mentions', icon: MessageSquare },
+  { name: 'Influenceurs', href: '/influencers', icon: Users },  // Nouveau
+  { name: 'Géographie', href: '/geography', icon: Globe },  
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Paramètres', href: '/settings', icon: Settings },
 ];

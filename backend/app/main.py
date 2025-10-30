@@ -13,7 +13,7 @@ from app.models import Keyword, Mention, CollectionLog
 from app.collectors.rss_collector import RSSCollector
 from app.collectors.reddit_collector import RedditCollector
 from app.collectors.youtube_collector import YouTubeCollector
-from app.collectors.tiktok_collector import Collector
+from app.collectors.tiktok_collector import TikTokCollector
 from app.collectors.google_search_collector import GoogleSearchCollector
 from app.collectors.google_alerts_collector import GoogleAlertsCollector
 from app.sentiment_analyzer import SentimentAnalyzer
@@ -21,6 +21,9 @@ from app.collectors.mastodon_collector import MastodonCollector
 from app.collectors.bluesky_collector import BlueskyCollector
 from app.collectors.telegram_collector import TelegramCollector
 from pydantic import BaseModel
+from app.api import email_router, influencer_router, geo_router
+from app.scheduler import init_scheduler, start_scheduler
+from app.scheduler import stop_scheduler
 
 # Configuration du logging
 logging.basicConfig(
@@ -52,6 +55,8 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     init_db()
+    init_scheduler()
+    start_scheduler()
     logger.info("Application démarrée et base de données initialisée")
 
 # ============ Modèles Pydantic ============
@@ -107,6 +112,10 @@ class AdvancedStatsResponse(BaseModel):
     daily_distribution: List[dict]
 
 # ============ Routes API ============
+
+app.include_router(email_router)
+app.include_router(influencer_router)
+app.include_router(geo_router)
 
 @app.get("/")
 async def root():

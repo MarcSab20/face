@@ -7,6 +7,8 @@ import Keywords from './pages/Keywords';
 import Mentions from './pages/Mentions';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
+import Influencers from './pages/influencers';
+import Geography from './pages/Geography';
 
 // Créer le QueryClient
 const queryClient = new QueryClient({
@@ -30,6 +32,8 @@ function App() {
             <Route path="mentions" element={<Mentions />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="influencers" element={<Influencers />} />
+            <Route path="geography" element={<Geography />} />
           </Route>
         </Routes>
       </BrowserRouter>
