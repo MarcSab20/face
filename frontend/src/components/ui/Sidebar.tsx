@@ -11,6 +11,7 @@ import {
   Menu,
   Moon,
   Sun,
+  FileText,
 } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 import { cn } from '@/lib/utils';
@@ -22,6 +23,7 @@ const navigation = [
   { name: 'Influenceurs', href: '/influencers', icon: Users },  // Nouveau
   { name: 'Géographie', href: '/geography', icon: Globe },  
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Rapports', href: '/reports', icon: FileText },
   { name: 'Paramètres', href: '/settings', icon: Settings },
 ];
 

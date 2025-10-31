@@ -9,6 +9,7 @@ import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import Influencers from './pages/influencers';
 import Geography from './pages/Geography';
+import Reports from './pages/Reports';
 
 // Créer le QueryClient
 const queryClient = new QueryClient({

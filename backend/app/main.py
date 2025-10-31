@@ -22,6 +22,7 @@ from app.collectors.bluesky_collector import BlueskyCollector
 from app.collectors.telegram_collector import TelegramCollector
 from pydantic import BaseModel
 from app.api import email_router, influencer_router, geo_router
+from app.reports_api import reports_router
 from app.scheduler import init_scheduler, start_scheduler
 from app.scheduler import stop_scheduler
 
@@ -116,6 +117,7 @@ class AdvancedStatsResponse(BaseModel):
 app.include_router(email_router)
 app.include_router(influencer_router)
 app.include_router(geo_router)
+app.include_router(reports_router)
 
 @app.get("/")
 async def root():
