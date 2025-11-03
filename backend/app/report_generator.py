@@ -539,20 +539,6 @@ class CameroonReportGenerator:
                 <h3 style="margin: 0 0 10px 0;">NIVEAU DE RISQUE: {risk['risk_level']} ({risk['risk_score']}/100)</h3>
                 <p><strong>Analyse:</strong> {risk['explanation']}</p>
                 
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <div class="metric-value">{risk['factors']['volume']['score']}%</div>
-                        <div class="metric-label">Volume ({risk['factors']['volume']['weight']})</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">{risk['factors']['sentiment']['score']}%</div>
-                        <div class="metric-label">Sentiment ({risk['factors']['sentiment']['weight']})</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">{risk['factors']['engagement']['score']}%</div>
-                        <div class="metric-label">Engagement ({risk['factors']['engagement']['weight']})</div>
-                    </div>
-                </div>
             </div>
             """
         
@@ -561,17 +547,11 @@ class CameroonReportGenerator:
             pos = report_data['positive_analysis']
             html += f"""
             <div class="section-title">😊 JUGEMENTS POSITIFS DES INTERNAUTES</div>
-            <div class="section-intro">
-                <strong>Enjeu stratégique:</strong> {pos['strategic_context']}
-            </div>
+            
             <div class="sentiment-positive">
                 <h4>Analyse des Réactions Favorables ({pos['count']} mentions)</h4>
                 <p>{pos['analysis']}</p>
                 
-                {f"<p><strong>Thèmes positifs identifiés:</strong> {', '.join(pos['key_themes'])}</p>" if pos['key_themes'] else ""}
-                
-                {"<h5>Mentions les plus engageantes:</h5>" if pos['top_mentions'] else ""}
-                {"".join([f'<div class="mention-quote">"{mention["content_extract"]}" - <strong>{mention["author"]}</strong> ({mention["source"]}, ⭐ {mention["engagement"]})</div>' for mention in pos['top_mentions'][:3]])}
             </div>
             """
         
@@ -580,17 +560,10 @@ class CameroonReportGenerator:
             neg = report_data['negative_analysis']
             html += f"""
             <div class="section-title">😞 JUGEMENTS NÉGATIFS DES INTERNAUTES</div>
-            <div class="section-intro">
-                <strong>Enjeu stratégique:</strong> {neg['strategic_context']}
-            </div>
             <div class="sentiment-negative">
                 <h4>Analyse des Réactions Critiques ({neg['count']} mentions)</h4>
                 <p>{neg['analysis']}</p>
                 
-                {f"<p><strong>Préoccupations identifiées:</strong> {', '.join(neg['key_concerns'])}</p>" if neg['key_concerns'] else ""}
-                
-                {"<h5>Critiques les plus relayées:</h5>" if neg['top_mentions'] else ""}
-                {"".join([f'<div class="mention-quote">"{mention["content_extract"]}" - <strong>{mention["author"]}</strong> ({mention["source"]}, ⭐ {mention["engagement"]})</div>' for mention in neg['top_mentions'][:3]])}
             </div>
             """
         
@@ -599,14 +572,11 @@ class CameroonReportGenerator:
             neu = report_data['neutral_analysis']
             html += f"""
             <div class="section-title">😐 JUGEMENTS NEUTRES DES INTERNAUTES</div>
-            <div class="section-intro">
-                <strong>Enjeu stratégique:</strong> {neu['strategic_context']}
-            </div>
             <div class="sentiment-neutral">
                 <h4>Analyse des Réactions Neutres ({neu['count']} mentions)</h4>
                 <p>{neu['analysis']}</p>
                 
-                {f"<p><strong>Thèmes d'observation:</strong> {', '.join(neu['observation_themes'])}</p>" if neu['observation_themes'] else ""}
+               
             </div>
             """
         
@@ -620,36 +590,14 @@ class CameroonReportGenerator:
                 <p style="margin-bottom: 0;">{synth['strategic_assessment']}</p>
             </div>
             
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <div class="metric-value" style="color: #10b981;">{synth['distribution']['positive']['percentage']}%</div>
-                    <div class="metric-label">Positif ({synth['distribution']['positive']['count']})</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-value" style="color: #ef4444;">{synth['distribution']['negative']['percentage']}%</div>
-                    <div class="metric-label">Négatif ({synth['distribution']['negative']['count']})</div>
-                </div>
-                <div class="metric-card">
-                    <div class="metric-value" style="color: #6b7280;">{synth['distribution']['neutral']['percentage']}%</div>
-                    <div class="metric-label">Neutre ({synth['distribution']['neutral']['count']})</div>
-                </div>
-            </div>
             
-            <div class="section-intro">
-                <strong>Recommandation stratégique:</strong> {synth['recommendation']}
-            </div>
             """
-        
-        html += '<div class="page-break"></div>'
         
         # 6. Influenceurs engagés
         if 'engaged_influencers' in report_data:
             inf = report_data['engaged_influencers']
             html += f"""
-            <div class="section-title">👑 INFLUENCEURS ENGAGÉS (France 24 & Personnalités Camerounaises)</div>
-            <div class="section-intro">
-                <strong>Enjeu stratégique:</strong> {inf['strategic_context']}
-            </div>
+            <div class="section-title">👑 Principaux influenceurs engagés </div>
             
             <p><strong>Analyse:</strong> {inf['analysis']}</p>
             
@@ -659,7 +607,6 @@ class CameroonReportGenerator:
                     <th>Plateforme</th>
                     <th>Mentions</th>
                     <th>Engagement Total</th>
-                    <th>Tendance</th>
                     <th>Portée Estimée</th>
                     <th>Niveau de Risque</th>
                     <th>Dernière Activité</th>
@@ -675,7 +622,6 @@ class CameroonReportGenerator:
                         <td>{influencer['platform']}</td>
                         <td>{influencer['mentions_count']}</td>
                         <td>{influencer['total_engagement']:,}</td>
-                        <td>{influencer['sentiment_tendency']}</td>
                         <td>{influencer['estimated_reach']}</td>
                         <td><strong>{influencer['risk_level']}</strong></td>
                         <td>{influencer['last_activity']}</td>
