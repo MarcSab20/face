@@ -175,7 +175,7 @@ export default function EnhancedReports() {
 
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/reports/generate-enhanced`,
+        `${API_BASE_URL}/api/reports/generate_enhanced_report`,
         {
           keyword_ids: selectedKeywords,
           days: periodDays,

@@ -12,7 +12,7 @@ import sys
 
 from app.database import get_db
 from app.models import Keyword
-from app.report_generator import ReportGeneratorEnhanced
+from app.report_generator import CameroonReportGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class ReportPreview(BaseModel):
 
 # ===== Routes =====
 
-@reports_router.post("/generate-enhanced")
+@reports_router.post("/generate_enhanced_report")
 async def generate_enhanced_report(
     request: EnhancedReportRequest,
     db: Session = Depends(get_db)
@@ -65,8 +65,8 @@ async def generate_enhanced_report(
             raise HTTPException(status_code=404, detail="Aucun mot-clé trouvé")
         
         # Générer le rapport avec le nouveau générateur enrichi
-        generator = ReportGeneratorEnhanced(db)
-        report_data = generator.generate_enhanced_report(
+        generator = CameroonReportGenerator(db)
+        report_data = generate_enhanced_report(
             keyword_ids=request.keyword_ids,
             days=request.days,
             report_object=request.report_object,
@@ -78,7 +78,7 @@ async def generate_enhanced_report(
         
         if request.format == "pdf":
             # Générer PDF enrichi
-            pdf_bytes = generator.generate_enhanced_pdf(report_data)
+            pdf_bytes = generate_cameroon_pdf(report_data)
             
             keywords_str = '_'.join([kw.keyword for kw in keywords])
             filename = f"rapport_enrichi_{keywords_str}_{report_data['generated_at'].strftime('%Y%m%d_%H%M%S')}.pdf"
@@ -412,7 +412,7 @@ async def get_available_keywords(db: Session = Depends(get_db)):
         })
     
     return {"keywords": result}
-    
+
 # Route de compatibilité avec l'ancienne API
 @reports_router.post("/generate")
 async def generate_legacy_report(
