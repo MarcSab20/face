@@ -1,6 +1,6 @@
 """
-Routes API pour la génération de rapports - Version 3 Enrichie
-Support des analyses avancées et recommandations opérationnelles
+Routes API pour la génération de rapports - Version Cameroun
+Support des analyses structurées en 5 sections
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 import logging
-import sys
 
 from app.database import get_db
 from app.models import Keyword
@@ -26,7 +25,7 @@ class EnhancedReportRequest(BaseModel):
     keyword_ids: List[int]  # Plusieurs mots-clés
     days: int = 30
     report_object: str = ""  # Objet du rapport
-    include_sections: Optional[List[str]] = None  # Sections à inclure
+    include_sections: Optional[List[str]] = None  # Sections à inclure (legacy)
     format: str = "pdf"  # pdf ou html
 
 
@@ -51,6 +50,7 @@ async def generate_enhanced_report(
 ):
     """
     Générer un rapport enrichi avec analyse de risque et recommandations
+    Structure en 5 sections : Positif, Négatif, Neutre, Synthèse, Influenceurs
     
     Args:
         request: Configuration du rapport enrichi
@@ -64,23 +64,19 @@ async def generate_enhanced_report(
         if not keywords:
             raise HTTPException(status_code=404, detail="Aucun mot-clé trouvé")
         
-        # Générer le rapport avec le nouveau générateur enrichi
+        # Générer le rapport avec le nouveau générateur camerounais
         generator = CameroonReportGenerator(db)
-        report_data = generate_enhanced_report(
+        report_data = generator.generate_cameroon_report(
             keyword_ids=request.keyword_ids,
             days=request.days,
-            report_object=request.report_object,
-            include_sections=request.include_sections or [
-                'analysis', 'risk_assessment', 'trends', 'key_content', 
-                'detailed_influencers', 'geography', 'comparison', 'recommendations'
-            ]
+            report_object=request.report_object
         )
         
         if request.format == "pdf":
             # Générer PDF enrichi
-            pdf_bytes = generate_cameroon_pdf(report_data)
+            pdf_bytes = generator.generate_cameroon_pdf(report_data)
             
-            keywords_str = '_'.join([kw.keyword for kw in keywords])
+            keywords_str = '_'.join([kw.keyword for kw in keywords])[:30]
             filename = f"rapport_enrichi_{keywords_str}_{report_data['generated_at'].strftime('%Y%m%d_%H%M%S')}.pdf"
             
             return Response(
@@ -92,7 +88,7 @@ async def generate_enhanced_report(
             )
         else:
             # Retourner HTML enrichi
-            html_content = generator.generate_enhanced_html_report(report_data)
+            html_content = generator.generate_cameroon_html_report(report_data)
             
             return Response(
                 content=html_content,
@@ -199,6 +195,7 @@ async def preview_enhanced_report(
 async def get_available_sections():
     """
     Obtenir la liste des sections disponibles pour les rapports enrichis
+    (Maintenu pour compatibilité, mais la structure est maintenant fixe)
     
     Returns:
         Liste des sections avec descriptions
@@ -206,66 +203,49 @@ async def get_available_sections():
     return {
         "sections": [
             {
-                "id": "analysis",
-                "name": "Analyse de Base",
-                "description": "Questions stratégiques et synthèse générale",
+                "id": "risk_assessment",
+                "name": "Évaluation de Gravité",
+                "description": "Note de risque (faible/modéré/élevé) avec facteurs détaillés",
+                "icon": "🚨",
+                "required": True
+            },
+            {
+                "id": "positive_sentiment",
+                "name": "Jugements Positifs",
+                "description": "Analyse des réactions favorables des internautes",
+                "icon": "😊",
+                "required": True
+            },
+            {
+                "id": "negative_sentiment",
+                "name": "Jugements Négatifs",
+                "description": "Analyse des réactions critiques des internautes",
+                "icon": "😞",
+                "required": True
+            },
+            {
+                "id": "neutral_sentiment",
+                "name": "Jugements Neutres",
+                "description": "Analyse des réactions neutres et leur potentiel",
+                "icon": "😐",
+                "required": True
+            },
+            {
+                "id": "synthesis",
+                "name": "Synthèse des Jugements",
+                "description": "Vue d'ensemble et tendance dominante",
                 "icon": "📊",
                 "required": True
             },
             {
-                "id": "risk_assessment",
-                "name": "Évaluation de Gravité",
-                "description": "Note de risque (faible/modéré/élevé) avec facteurs",
-                "icon": "🚨",
-                "required": False
-            },
-            {
-                "id": "trends",
-                "name": "Analyse des Tendances",
-                "description": "Graphiques temporels et détection de pics",
-                "icon": "📈",
-                "required": False
-            },
-            {
-                "id": "key_content",
-                "name": "Contenus Clés",
-                "description": "Publications les plus engageantes et arguments récurrents",
-                "icon": "💬",
-                "required": False
-            },
-            {
-                "id": "detailed_influencers",
-                "name": "Profils Détaillés Influenceurs",
-                "description": "Métriques avancées : portée, évolution du ton, fréquence",
+                "id": "engaged_influencers",
+                "name": "Influenceurs Engagés",
+                "description": "France 24 et personnalités camerounaises actives",
                 "icon": "👑",
-                "required": False
-            },
-            {
-                "id": "geography",
-                "name": "Répartition Géographique",
-                "description": "Provenance des mentions par pays/régions",
-                "icon": "🌍",
-                "required": False
-            },
-            {
-                "id": "comparison",
-                "name": "Comparaison Temporelle",
-                "description": "Évolution vs période précédente",
-                "icon": "📊",
-                "required": False
-            },
-            {
-                "id": "recommendations",
-                "name": "Recommandations Opérationnelles",
-                "description": "Suggestions concrètes d'actions prioritaires",
-                "icon": "🎯",
-                "required": False
+                "required": True
             }
         ],
-        "default_sections": [
-            "analysis", "risk_assessment", "trends", "detailed_influencers", 
-            "geography", "comparison", "recommendations"
-        ]
+        "note": "Structure fixe en 6 sections pour cohérence analytique"
     }
 
 
@@ -348,35 +328,27 @@ async def get_report_templates():
     return {
         "templates": [
             {
-                "id": "executive_summary",
-                "name": "Résumé Exécutif",
-                "description": "Rapport concis pour décideurs (2 pages)",
-                "sections": ["analysis", "risk_assessment", "recommendations"],
-                "duration": "7-14 jours",
-                "audience": "Direction générale"
+                "id": "standard_cameroon",
+                "name": "Rapport Standard Cameroun",
+                "description": "Structure complète en 6 sections pour analyse approfondie",
+                "sections": ["risk_assessment", "positive_sentiment", "negative_sentiment", "neutral_sentiment", "synthesis", "engaged_influencers"],
+                "duration": "14-30 jours",
+                "audience": "Direction, analystes"
             },
             {
                 "id": "crisis_management",
                 "name": "Gestion de Crise",
-                "description": "Analyse complète pour situation critique",
-                "sections": ["risk_assessment", "trends", "key_content", "detailed_influencers", "recommendations"],
-                "duration": "3-7 jours",
+                "description": "Focus sur les jugements négatifs et influenceurs à risque",
+                "sections": ["risk_assessment", "negative_sentiment", "engaged_influencers", "synthesis"],
+                "duration": "7 jours",
                 "audience": "Cellule de crise"
-            },
-            {
-                "id": "strategic_analysis",
-                "name": "Analyse Stratégique",
-                "description": "Rapport complet avec comparaisons (4-5 pages)",
-                "sections": ["analysis", "risk_assessment", "trends", "detailed_influencers", "geography", "comparison", "recommendations"],
-                "duration": "30-90 jours",
-                "audience": "État-major, analystes"
             },
             {
                 "id": "influence_mapping",
                 "name": "Cartographie d'Influence",
-                "description": "Focus sur les acteurs clés et géographie",
-                "sections": ["detailed_influencers", "geography", "key_content", "recommendations"],
-                "duration": "14-30 jours",
+                "description": "Analyse détaillée des influenceurs France 24 et personnalités",
+                "sections": ["engaged_influencers", "synthesis"],
+                "duration": "30 jours",
                 "audience": "Service influence"
             }
         ]
@@ -423,4 +395,3 @@ async def generate_legacy_report(
     Route de compatibilité - redirige vers le générateur enrichi
     """
     return await generate_enhanced_report(request, db)
-    

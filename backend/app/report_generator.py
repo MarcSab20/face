@@ -45,6 +45,14 @@ class CameroonReportGenerator:
     ) -> Dict:
         """
         Générer un rapport enrichi avec structure en 5 sections
+        
+        Structure:
+        1. Évaluation de gravité
+        2. Jugements positifs des internautes
+        3. Jugements négatifs des internautes
+        4. Jugements neutres des internautes
+        5. Synthèse des jugements
+        6. Influenceurs engagés (France 24 + Liste spécifique)
         """
         from app.models import Keyword, Mention
         
@@ -65,8 +73,13 @@ class CameroonReportGenerator:
             Mention.published_at >= since_date
         ).order_by(desc(Mention.published_at)).all()
         
-        # Filtrer les mentions France 24 pour les influenceurs
-        france24_mentions = [m for m in mentions if m.source.lower() == 'france_24' or 'france' in m.source.lower()]
+        # Filtrer les mentions France 24 et influenceurs spécifiques pour la section influenceurs
+        france24_mentions = [m for m in mentions if 'france' in m.source.lower() and '24' in m.source.lower()]
+        influencer_mentions = [
+            m for m in mentions 
+            if any(inf.lower() in m.author.lower() for inf in self.CAMEROON_INFLUENCERS)
+        ]
+        targeted_mentions = france24_mentions + influencer_mentions
         
         report_data = {
             'keywords': keywords_names,
@@ -80,7 +93,7 @@ class CameroonReportGenerator:
         # 1. Évaluation de gravité (maintenue)
         report_data['risk_assessment'] = self._generate_risk_assessment(mentions, days)
         
-        # 2. Sections par sentiment
+        # 2-4. Sections par sentiment
         positive_mentions = [m for m in mentions if m.sentiment == 'positive']
         negative_mentions = [m for m in mentions if m.sentiment == 'negative']
         neutral_mentions = [m for m in mentions if m.sentiment == 'neutral']
@@ -89,15 +102,13 @@ class CameroonReportGenerator:
         report_data['negative_analysis'] = self._analyze_negative_sentiment(negative_mentions)
         report_data['neutral_analysis'] = self._analyze_neutral_sentiment(neutral_mentions)
         
-        # 3. Synthèse des jugements
+        # 5. Synthèse des jugements
         report_data['judgment_synthesis'] = self._generate_judgment_synthesis(
             positive_mentions, negative_mentions, neutral_mentions
         )
         
-        # 4. Influenceurs engagés (France 24 + liste spécifique)
-        report_data['engaged_influencers'] = self._analyze_engaged_influencers(
-            france24_mentions + [m for m in mentions if any(inf.lower() in m.author.lower() for inf in self.CAMEROON_INFLUENCERS)]
-        )
+        # 6. Influenceurs engagés (France 24 + liste spécifique)
+        report_data['engaged_influencers'] = self._analyze_engaged_influencers(targeted_mentions)
         
         return report_data
     
