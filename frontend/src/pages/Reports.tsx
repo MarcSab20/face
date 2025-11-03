@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   FileText,
@@ -9,6 +9,8 @@ import {
   Check,
   X,
   Loader2,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { Card, Badge, PageLoading, Modal, Alert } from '@/components/ui/index';
 import toast from 'react-hot-toast';
@@ -24,27 +26,26 @@ interface KeywordOption {
 }
 
 interface ReportPreview {
-  keyword: string;
-  keyword_id: number;
+  keywords: string[];
+  keyword_ids: number[];
   period_days: number;
   total_mentions: number;
-  has_stats: boolean;
+  has_analysis: boolean;
   has_influencers: boolean;
-  has_geography: boolean;
 }
 
-export default function Reports() {
-  const [selectedKeyword, setSelectedKeyword] = useState<number | null>(null);
+export default function ReportsV2() {
+  const [selectedKeywords, setSelectedKeywords] = useState<number[]>([]);
   const [periodDays, setPeriodDays] = useState(30);
+  const [reportObject, setReportObject] = useState('');
   const [selectedSections, setSelectedSections] = useState<string[]>([
-    'stats',
+    'analysis',
     'influencers',
-    'mentions',
-    'geography',
   ]);
   const [format, setFormat] = useState<'pdf' | 'html'>('pdf');
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [previewData, setPreviewData] = useState<ReportPreview | null>(null);
 
   // Charger les mots-clés disponibles
   const { data: keywordsData, isLoading: loadingKeywords } = useQuery({
@@ -57,45 +58,28 @@ export default function Reports() {
     },
   });
 
-  // Prévisualisation du rapport
-  const { data: previewData, refetch: refetchPreview } = useQuery<ReportPreview>({
-    queryKey: ['reportPreview', selectedKeyword, periodDays],
-    queryFn: async () => {
-      if (!selectedKeyword) return null;
-      const response = await axios.get(
-        `${API_BASE_URL}/api/reports/preview/${selectedKeyword}?days=${periodDays}`
-      );
-      return response.data;
-    },
-    enabled: !!selectedKeyword,
-  });
-
   const sections = [
     {
-      id: 'stats',
-      name: 'Statistiques',
-      description: 'Vue d\'ensemble, sentiment, sources',
+      id: 'analysis',
+      name: 'Analyse Détaillée',
+      description: 'Réponses aux questions stratégiques',
       icon: '📊',
     },
     {
       id: 'influencers',
-      name: 'Influenceurs',
-      description: 'Top influenceurs et leur impact',
+      name: 'Top Influenceurs',
+      description: 'Tableau des comptes les plus engagés',
       icon: '👑',
     },
-    {
-      id: 'mentions',
-      name: 'Mentions',
-      description: 'Détails des mentions et auteurs',
-      icon: '💬',
-    },
-    {
-      id: 'geography',
-      name: 'Géographie',
-      description: 'Distribution géographique',
-      icon: '🌍',
-    },
   ];
+
+  const toggleKeyword = (keywordId: number) => {
+    setSelectedKeywords((prev) =>
+      prev.includes(keywordId)
+        ? prev.filter((id) => id !== keywordId)
+        : [...prev, keywordId]
+    );
+  };
 
   const toggleSection = (sectionId: string) => {
     setSelectedSections((prev) =>
@@ -106,13 +90,18 @@ export default function Reports() {
   };
 
   const handleGenerateReport = async () => {
-    if (!selectedKeyword) {
-      toast.error('Veuillez sélectionner un mot-clé');
+    if (selectedKeywords.length === 0) {
+      toast.error('Veuillez sélectionner au moins un mot-clé');
       return;
     }
 
     if (selectedSections.length === 0) {
       toast.error('Veuillez sélectionner au moins une section');
+      return;
+    }
+
+    if (!reportObject.trim()) {
+      toast.error('Veuillez saisir l\'objet du rapport');
       return;
     }
 
@@ -122,8 +111,9 @@ export default function Reports() {
       const response = await axios.post(
         `${API_BASE_URL}/api/reports/generate`,
         {
-          keyword_id: selectedKeyword,
+          keyword_ids: selectedKeywords,
           days: periodDays,
+          report_object: reportObject,
           include_sections: selectedSections,
           format: format,
         },
@@ -138,8 +128,7 @@ export default function Reports() {
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        const keyword = keywordsData?.keywords.find((k) => k.id === selectedKeyword);
-        link.download = `rapport_${keyword?.keyword}_${new Date().toISOString().split('T')[0]}.pdf`;
+        link.download = `rapport_${reportObject.substring(0, 30)}_${new Date().toISOString().split('T')[0]}.pdf`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -161,13 +150,25 @@ export default function Reports() {
     }
   };
 
-  const handlePreview = () => {
-    if (!selectedKeyword) {
-      toast.error('Veuillez sélectionner un mot-clé');
+  const handlePreview = async () => {
+    if (selectedKeywords.length === 0) {
+      toast.error('Veuillez sélectionner au moins un mot-clé');
       return;
     }
-    setShowPreviewModal(true);
-    refetchPreview();
+
+    try {
+      const response = await axios.post<ReportPreview>(
+        `${API_BASE_URL}/api/reports/preview`,
+        selectedKeywords,
+        {
+          params: { days: periodDays }
+        }
+      );
+      setPreviewData(response.data);
+      setShowPreviewModal(true);
+    } catch (error) {
+      toast.error('Erreur lors de la prévisualisation');
+    }
   };
 
   if (loadingKeywords) {
@@ -181,23 +182,48 @@ export default function Reports() {
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          📄 Génération de Rapports
+          📄 Génération de Rapports Avancés
         </h1>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Créez des rapports PDF professionnels pour vos mots-clés
+          Rapports analytiques sur 2 pages avec analyse détaillée
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Configuration */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Sélection mot-clé */}
+          {/* Objet du rapport */}
           <Card>
             <div className="flex items-center space-x-3 mb-4">
               <FileText className="w-6 h-6 text-primary-500" />
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                Sélection du mot-clé
+                Objet du rapport
               </h2>
+            </div>
+            
+            <input
+              type="text"
+              value={reportObject}
+              onChange={(e) => setReportObject(e.target.value)}
+              placeholder="Ex: Évaluation de la réception du projet X, Analyse sentiment campagne Y..."
+              className="input"
+              maxLength={200}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Cet objet apparaîtra en en-tête du rapport (max 200 caractères)
+            </p>
+          </Card>
+
+          {/* Sélection mots-clés (MULTI) */}
+          <Card>
+            <div className="flex items-center space-x-3 mb-4">
+              <Settings className="w-6 h-6 text-primary-500" />
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                Sélection des mots-clés
+              </h2>
+              <Badge variant="primary">
+                {selectedKeywords.length} sélectionné{selectedKeywords.length > 1 ? 's' : ''}
+              </Badge>
             </div>
 
             {keywords.length === 0 ? (
@@ -205,31 +231,38 @@ export default function Reports() {
                 Aucun mot-clé disponible. Ajoutez des mots-clés dans la section dédiée.
               </Alert>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {keywords.map((keyword) => (
-                  <button
-                    key={keyword.id}
-                    onClick={() => setSelectedKeyword(keyword.id)}
-                    className={`p-4 rounded-xl border-2 text-left transition-all ${
-                      selectedKeyword === keyword.id
-                        ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between mb-2">
-                      <span className="font-semibold text-gray-900 dark:text-white">
-                        {keyword.keyword}
-                      </span>
-                      {selectedKeyword === keyword.id && (
-                        <Check className="w-5 h-5 text-primary-500" />
-                      )}
-                    </div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                      {keyword.mentions_30d} mentions (30j)
-                    </div>
-                  </button>
-                ))}
-              </div>
+              <>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                  💡 Sélectionnez un ou plusieurs mots-clés pour combiner l'analyse
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {keywords.map((keyword) => (
+                    <button
+                      key={keyword.id}
+                      onClick={() => toggleKeyword(keyword.id)}
+                      className={`p-4 rounded-xl border-2 text-left transition-all ${
+                        selectedKeywords.includes(keyword.id)
+                          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <span className="font-semibold text-gray-900 dark:text-white">
+                          {keyword.keyword}
+                        </span>
+                        {selectedKeywords.includes(keyword.id) ? (
+                          <Check className="w-5 h-5 text-primary-500" />
+                        ) : (
+                          <Plus className="w-5 h-5 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        {keyword.mentions_30d} mentions (30j)
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </Card>
 
@@ -259,21 +292,21 @@ export default function Reports() {
             </div>
           </Card>
 
-          {/* Sections à inclure */}
+          {/* Sections */}
           <Card>
             <div className="flex items-center space-x-3 mb-4">
-              <Settings className="w-6 h-6 text-primary-500" />
+              <FileText className="w-6 h-6 text-primary-500" />
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                 Sections à inclure
               </h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-3">
               {sections.map((section) => (
                 <button
                   key={section.id}
                   onClick={() => toggleSection(section.id)}
-                  className={`p-4 rounded-xl border-2 text-left transition-all ${
+                  className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
                     selectedSections.includes(section.id)
                       ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
                       : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
@@ -321,7 +354,7 @@ export default function Reports() {
                 </div>
                 <div className="font-semibold text-gray-900 dark:text-white">PDF</div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Format professionnel, prêt à imprimer
+                  Format professionnel, 2 pages
                 </p>
               </button>
 
@@ -339,7 +372,7 @@ export default function Reports() {
                 </div>
                 <div className="font-semibold text-gray-900 dark:text-white">HTML</div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Prévisualisation web interactive
+                  Prévisualisation web
                 </p>
               </button>
             </div>
@@ -355,12 +388,28 @@ export default function Reports() {
 
             <div className="space-y-4">
               <div>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Mot-clé</p>
-                <p className="font-semibold text-gray-900 dark:text-white">
-                  {selectedKeyword
-                    ? keywords.find((k) => k.id === selectedKeyword)?.keyword
-                    : 'Non sélectionné'}
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Objet</p>
+                <p className="font-semibold text-gray-900 dark:text-white text-sm">
+                  {reportObject || 'Non renseigné'}
                 </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Mots-clés</p>
+                <div className="flex flex-wrap gap-2">
+                  {selectedKeywords.length === 0 ? (
+                    <span className="text-gray-500 text-sm">Aucun sélectionné</span>
+                  ) : (
+                    selectedKeywords.map((id) => {
+                      const kw = keywords.find((k) => k.id === id);
+                      return kw ? (
+                        <Badge key={id} variant="primary">
+                          {kw.keyword}
+                        </Badge>
+                      ) : null;
+                    })
+                  )}
+                </div>
               </div>
 
               <div>
@@ -390,23 +439,12 @@ export default function Reports() {
                   {format}
                 </p>
               </div>
-
-              {previewData && (
-                <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                    Mentions trouvées
-                  </p>
-                  <p className="text-3xl font-bold text-primary-500">
-                    {previewData.total_mentions}
-                  </p>
-                </div>
-              )}
             </div>
 
             <div className="mt-6 space-y-3">
               <button
                 onClick={handlePreview}
-                disabled={!selectedKeyword}
+                disabled={selectedKeywords.length === 0}
                 className="btn btn-secondary w-full flex items-center justify-center space-x-2"
               >
                 <Eye className="w-4 h-4" />
@@ -415,7 +453,12 @@ export default function Reports() {
 
               <button
                 onClick={handleGenerateReport}
-                disabled={!selectedKeyword || selectedSections.length === 0 || isGenerating}
+                disabled={
+                  selectedKeywords.length === 0 ||
+                  selectedSections.length === 0 ||
+                  !reportObject.trim() ||
+                  isGenerating
+                }
                 className="btn btn-primary w-full flex items-center justify-center space-x-2"
               >
                 {isGenerating ? (
@@ -433,19 +476,19 @@ export default function Reports() {
             </div>
           </Card>
 
-          {/* Conseils */}
+          {/* Aide */}
           <Card className="bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800">
             <div className="flex items-start space-x-3">
               <div className="text-2xl">💡</div>
               <div>
                 <h4 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">
-                  Conseils
+                  Structure du rapport
                 </h4>
                 <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
-                  <li>• Sélectionnez une période pertinente (30 jours recommandé)</li>
-                  <li>• Incluez toutes les sections pour un rapport complet</li>
-                  <li>• Le format PDF est idéal pour l'impression et le partage</li>
-                  <li>• Les rapports peuvent prendre quelques secondes à générer</li>
+                  <li><strong>Page 1:</strong> Analyse détaillée avec réponses aux questions stratégiques et synthèse</li>
+                  <li><strong>Page 2:</strong> Tableau des top influenceurs les plus engagés</li>
+                  <li>• Combinez plusieurs mots-clés pour une analyse groupée</li>
+                  <li>• L'objet du rapport apparaît en en-tête</li>
                 </ul>
               </div>
             </div>
@@ -464,10 +507,14 @@ export default function Reports() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Mot-clé</p>
-                <p className="text-xl font-bold text-gray-900 dark:text-white">
-                  {previewData.keyword}
-                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Mots-clés</p>
+                <div className="flex flex-wrap gap-1">
+                  {previewData.keywords.map((kw) => (
+                    <Badge key={kw} variant="primary">
+                      {kw}
+                    </Badge>
+                  ))}
+                </div>
               </div>
 
               <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
@@ -486,9 +533,8 @@ export default function Reports() {
               </p>
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { key: 'has_stats', label: 'Statistiques', icon: '📊' },
-                  { key: 'has_influencers', label: 'Influenceurs', icon: '👑' },
-                  { key: 'has_geography', label: 'Géographie', icon: '🌍' },
+                  { key: 'has_analysis', label: 'Analyse Détaillée', icon: '📊' },
+                  { key: 'has_influencers', label: 'Top Influenceurs', icon: '👑' },
                 ].map((item) => (
                   <div
                     key={item.key}

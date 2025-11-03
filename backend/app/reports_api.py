@@ -1,5 +1,6 @@
 """
-Routes API pour la génération de rapports
+Routes API pour la génération de rapports - Version 2
+Support de multi-mots-clés et objet de rapport
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -7,10 +8,11 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 import logging
+import sys
 
 from app.database import get_db
-from app.report_generator import ReportGenerator
 from app.models import Keyword
+from app.report_generator import ReportGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -21,19 +23,19 @@ reports_router = APIRouter(prefix="/api/reports", tags=["reports"])
 # ===== Modèles Pydantic =====
 
 class ReportRequest(BaseModel):
-    keyword_id: int
+    keyword_ids: List[int]  # Maintenant accepte plusieurs IDs
     days: int = 30
+    report_object: str = ""  # Objet du rapport
     include_sections: Optional[List[str]] = None
     format: str = "pdf"  # pdf ou html
 
 
 class ReportPreview(BaseModel):
-    keyword: str
+    keywords: List[str]
     period_days: int
     total_mentions: int
-    has_stats: bool
+    has_analysis: bool
     has_influencers: bool
-    has_geography: bool
 
 
 # ===== Routes =====
@@ -44,7 +46,7 @@ async def generate_report(
     db: Session = Depends(get_db)
 ):
     """
-    Générer un rapport pour un mot-clé
+    Générer un rapport pour un ou plusieurs mots-clés
     
     Args:
         request: Configuration du rapport
@@ -53,24 +55,26 @@ async def generate_report(
         PDF ou HTML du rapport
     """
     try:
-        # Vérifier que le mot-clé existe
-        keyword = db.query(Keyword).filter(Keyword.id == request.keyword_id).first()
-        if not keyword:
-            raise HTTPException(status_code=404, detail="Mot-clé non trouvé")
+        # Vérifier que les mots-clés existent
+        keywords = db.query(Keyword).filter(Keyword.id.in_(request.keyword_ids)).all()
+        if not keywords:
+            raise HTTPException(status_code=404, detail="Aucun mot-clé trouvé")
         
-        # Générer le rapport
+        # Générer le rapport avec le nouveau générateur
         generator = ReportGenerator(db)
         report_data = generator.generate_keyword_report(
-            keyword_id=request.keyword_id,
+            keyword_ids=request.keyword_ids,
             days=request.days,
-            include_sections=request.include_sections
+            report_object=request.report_object,
+            include_sections=request.include_sections or ['analysis', 'influencers']
         )
         
         if request.format == "pdf":
             # Générer PDF
             pdf_bytes = generator.generate_pdf(report_data)
             
-            filename = f"rapport_{keyword.keyword}_{report_data['generated_at'].strftime('%Y%m%d_%H%M%S')}.pdf"
+            keywords_str = '_'.join([kw.keyword for kw in keywords])
+            filename = f"rapport_{keywords_str}_{report_data['generated_at'].strftime('%Y%m%d_%H%M%S')}.pdf"
             
             return Response(
                 content=pdf_bytes,
@@ -96,9 +100,9 @@ async def generate_report(
         )
 
 
-@reports_router.get("/preview/{keyword_id}")
+@reports_router.post("/preview")
 async def preview_report(
-    keyword_id: int,
+    keyword_ids: List[int],
     days: int = 30,
     db: Session = Depends(get_db)
 ):
@@ -106,7 +110,7 @@ async def preview_report(
     Prévisualiser les informations d'un rapport sans le générer
     
     Args:
-        keyword_id: ID du mot-clé
+        keyword_ids: IDs des mots-clés
         days: Période d'analyse
         
     Returns:
@@ -115,27 +119,26 @@ async def preview_report(
     from app.models import Mention
     from datetime import datetime, timedelta
     
-    # Vérifier que le mot-clé existe
-    keyword = db.query(Keyword).filter(Keyword.id == keyword_id).first()
-    if not keyword:
-        raise HTTPException(status_code=404, detail="Mot-clé non trouvé")
+    # Vérifier que les mots-clés existent
+    keywords = db.query(Keyword).filter(Keyword.id.in_(keyword_ids)).all()
+    if not keywords:
+        raise HTTPException(status_code=404, detail="Aucun mot-clé trouvé")
     
     since_date = datetime.utcnow() - timedelta(days=days)
     
     # Compter les mentions
     mentions_count = db.query(Mention).filter(
-        Mention.keyword_id == keyword_id,
+        Mention.keyword_id.in_(keyword_ids),
         Mention.published_at >= since_date
     ).count()
     
     return {
-        "keyword": keyword.keyword,
-        "keyword_id": keyword_id,
+        "keywords": [kw.keyword for kw in keywords],
+        "keyword_ids": keyword_ids,
         "period_days": days,
         "total_mentions": mentions_count,
-        "has_stats": mentions_count > 0,
+        "has_analysis": mentions_count > 0,
         "has_influencers": mentions_count > 0,
-        "has_geography": mentions_count > 0,
     }
 
 

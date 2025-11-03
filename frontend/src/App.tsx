@@ -34,6 +34,7 @@ function App() {
             <Route path="analytics" element={<Analytics />} />
             <Route path="settings" element={<Settings />} />
             <Route path="influencers" element={<Influencers />} />
+            <Route path="reports" element={<Reports />} />
             <Route path="geography" element={<Geography />} />
           </Route>
         </Routes>
