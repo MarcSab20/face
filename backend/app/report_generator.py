@@ -1,6 +1,7 @@
 """
 Générateur de rapports enrichi spécialisé pour le contexte camerounais
-Structuré en 5 sections : Positif, Négatif, Neutre, Synthèse, Influenceurs Engagés
+Version améliorée avec intelligence analytique avancée
+Structuré en 6 sections sur 2 pages avec contenu dense et stratégique
 """
 
 import logging
@@ -10,12 +11,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, desc
 from collections import Counter
 import statistics
+import re
 
 logger = logging.getLogger(__name__)
 
 
 class CameroonReportGenerator:
-    """Générateur de rapports enrichi pour le contexte camerounais"""
+    """Générateur de rapports enrichi avec analyse stratégique avancée"""
     
     # Liste des influenceurs camerounais à surveiller
     CAMEROON_INFLUENCERS = [
@@ -23,10 +25,10 @@ class CameroonReportGenerator:
         "Abdoulaye Thiam", "Ahmed Abba", "Cameroon News Agency", "Brice Nitcheu",
         "MbangaMan237", "Sandy Boston Officiel 3", "Mbong Mendzui officiel",
         "Patrice Nouma", "Richard Bona", "Paul Chouta", "Mimi Mefo",
-        "Général Valsero", "Jaques Bertrand mang", "Michelle ngatchou",
-        "AfroBrains Cameroon-ABC", "Infolage", "Mc-Kenzo-officiel",
-        "Lepierro Lemonstre", "James Bardock Bardock", "Fernandtech TV",
-        "Maurice Kamto", "Kah Walla", "Valsero", "Brenda Biya",
+        "Talk with Mimi Mefo", "Général Valsero", "Jaques Bertrand mang", 
+        "Michelle ngatchou", "AfroBrains Cameroon-ABC", "Infolage", 
+        "Mc-Kenzo-officiel", "Lepierro Lemonstre", "James Bardock Bardock", 
+        "Fernandtech TV", "Maurice Kamto", "Kah Walla", "Valsero", "Brenda Biya",
         "Calibri Calibro", "Patrice Nganang", "Wilfried Ekanga",
         "Abdouraman Hamadou", "Ernest Obama", "Christian Penda Ekoka",
         "Fabrice Lena", "Michel Biem Tong", "Armand Okol",
@@ -43,24 +45,10 @@ class CameroonReportGenerator:
         days: int = 30,
         report_object: str = ""
     ) -> Dict:
-        """
-        Générer un rapport enrichi avec structure en 5 sections
-        
-        Structure:
-        1. Évaluation de gravité
-        2. Jugements positifs des internautes
-        3. Jugements négatifs des internautes
-        4. Jugements neutres des internautes
-        5. Synthèse des jugements
-        6. Influenceurs engagés (France 24 + Liste spécifique)
-        """
+        """Générer un rapport enrichi ultra-détaillé avec structure en 6 sections"""
         from app.models import Keyword, Mention
         
-        # Récupérer les mots-clés
-        keywords = self.db.query(Keyword).filter(
-            Keyword.id.in_(keyword_ids)
-        ).all()
-        
+        keywords = self.db.query(Keyword).filter(Keyword.id.in_(keyword_ids)).all()
         if not keywords:
             raise ValueError("Aucun mot-clé trouvé")
         
@@ -73,7 +61,7 @@ class CameroonReportGenerator:
             Mention.published_at >= since_date
         ).order_by(desc(Mention.published_at)).all()
         
-        # Filtrer les mentions France 24 et influenceurs spécifiques pour la section influenceurs
+        # Filtrer influenceurs spécifiques
         france24_mentions = [m for m in mentions if 'france' in m.source.lower() and '24' in m.source.lower()]
         influencer_mentions = [
             m for m in mentions 
@@ -90,74 +78,106 @@ class CameroonReportGenerator:
             'total_mentions': len(mentions),
         }
         
-        # 1. Évaluation de gravité (maintenue)
-        report_data['risk_assessment'] = self._generate_risk_assessment(mentions, days)
-        
-        # 2-4. Sections par sentiment
+        # Analyses enrichies
         positive_mentions = [m for m in mentions if m.sentiment == 'positive']
         negative_mentions = [m for m in mentions if m.sentiment == 'negative']
         neutral_mentions = [m for m in mentions if m.sentiment == 'neutral']
         
-        report_data['positive_analysis'] = self._analyze_positive_sentiment(positive_mentions)
-        report_data['negative_analysis'] = self._analyze_negative_sentiment(negative_mentions)
-        report_data['neutral_analysis'] = self._analyze_neutral_sentiment(neutral_mentions)
-        
-        # 5. Synthèse des jugements
-        report_data['judgment_synthesis'] = self._generate_judgment_synthesis(
-            positive_mentions, negative_mentions, neutral_mentions
+        report_data['risk_assessment'] = self._generate_enriched_risk_assessment(mentions, days)
+        report_data['positive_analysis'] = self._analyze_positive_sentiment_enriched(positive_mentions, mentions)
+        report_data['negative_analysis'] = self._analyze_negative_sentiment_enriched(negative_mentions, mentions)
+        report_data['neutral_analysis'] = self._analyze_neutral_sentiment_enriched(neutral_mentions, mentions)
+        report_data['judgment_synthesis'] = self._generate_enriched_synthesis(
+            positive_mentions, negative_mentions, neutral_mentions, mentions, days
         )
-        
-        # 6. Influenceurs engagés (France 24 + liste spécifique)
-        report_data['engaged_influencers'] = self._analyze_engaged_influencers(targeted_mentions)
+        report_data['engaged_influencers'] = self._analyze_engaged_influencers_enriched(targeted_mentions, mentions)
+        report_data['recommendations'] = self._generate_strategic_recommendations(report_data)
         
         return report_data
     
-    def _generate_risk_assessment(self, mentions: List, days: int) -> Dict:
-        """Évaluation de la gravité (identique à l'original)"""
+    def _generate_enriched_risk_assessment(self, mentions: List, days: int) -> Dict:
+        """Évaluation enrichie avec évolution temporelle, insights et métriques détaillées"""
         if not mentions:
             return {
                 'risk_level': 'FAIBLE',
                 'risk_score': 0,
                 'explanation': 'Aucune mention détectée sur la période.',
-                'factors': {}
+                'factors': {},
+                'evolution': [],
+                'insight': 'Absence de données - surveillance recommandée.',
+                'signal_principal': 'Aucune activité détectée',
+                'action_prioritaire': 'Lancer une première campagne de communication'
             }
         
         total_mentions = len(mentions)
         
-        # Facteurs de risque
+        # === FACTEURS DE RISQUE ===
         volume_score = min(total_mentions / (days * 10), 1.0)
         
         negative_mentions = [m for m in mentions if m.sentiment == 'negative']
-        negative_ratio = len(negative_mentions) / total_mentions if total_mentions > 0 else 0
+        neutral_mentions = [m for m in mentions if m.sentiment == 'neutral']
+        negative_ratio = len(negative_mentions) / total_mentions
+        neutral_ratio = len(neutral_mentions) / total_mentions
         sentiment_score = negative_ratio
         
-        if mentions:
-            avg_engagement = sum(m.engagement_score for m in mentions) / len(mentions)
-            max_engagement = max(m.engagement_score for m in mentions)
-            engagement_score = min((avg_engagement + max_engagement) / 2000, 1.0)
-        else:
-            engagement_score = 0
+        avg_engagement = sum(m.engagement_score for m in mentions) / len(mentions)
+        max_engagement = max(m.engagement_score for m in mentions)
+        engagement_score = min((avg_engagement + max_engagement) / 2000, 1.0)
         
-        # Pics d'activité
+        # === ÉVOLUTION TEMPORELLE (par semaine) ===
         timeline = {}
         for mention in mentions:
             if mention.published_at:
                 date_key = mention.published_at.date()
                 timeline[date_key] = timeline.get(date_key, 0) + 1
         
+        weekly_data = []
+        if timeline:
+            sorted_dates = sorted(timeline.keys())
+            weeks = (sorted_dates[-1] - sorted_dates[0]).days // 7 + 1
+            
+            for week_num in range(min(weeks, 4)):
+                start_date = sorted_dates[0] + timedelta(days=week_num * 7)
+                end_date = start_date + timedelta(days=7)
+                
+                week_mentions = sum(
+                    timeline.get(d, 0) 
+                    for d in timeline.keys() 
+                    if start_date <= d < end_date
+                )
+                
+                if week_mentions > 0:
+                    weekly_data.append({
+                        'week': f'Semaine {week_num + 1} ({start_date.strftime("%d/%m")}-{end_date.strftime("%d/%m")})',
+                        'mentions': week_mentions,
+                        'trend': self._calculate_trend_icon(weekly_data, week_mentions) if weekly_data else 'Stable'
+                    })
+        
+        # Détection de pics
+        spike_score = 0
+        peak_detected = False
+        peak_week = None
+        
         if timeline:
             daily_counts = list(timeline.values())
-            avg_daily = statistics.mean(daily_counts)
-            max_daily = max(daily_counts)
-            spike_score = min((max_daily / (avg_daily + 1)) / 5, 1.0)
-        else:
-            spike_score = 0
+            if len(daily_counts) >= 2:
+                avg_daily = statistics.mean(daily_counts)
+                stddev = statistics.stdev(daily_counts) if len(daily_counts) > 1 else 0
+                max_daily = max(daily_counts)
+                
+                if stddev > 0:
+                    z_score = (max_daily - avg_daily) / stddev
+                    peak_detected = z_score > 2.0
+                    spike_score = min(z_score / 5, 1.0)
+                    
+                    if peak_detected and weekly_data:
+                        peak_week = max(weekly_data, key=lambda w: w['mentions'])
         
         # Diversité sources
         sources = set(m.source for m in mentions)
         source_diversity_score = min(len(sources) / 5, 1.0)
         
-        # Score global
+        # === SCORE GLOBAL ===
         risk_score = (
             volume_score * 25 +
             sentiment_score * 30 +
@@ -176,117 +196,239 @@ class CameroonReportGenerator:
             risk_level = 'FAIBLE'
             color = '#10b981'
         
+        # === SIGNAL PRINCIPAL ===
+        if neutral_ratio > 0.6:
+            signal_principal = f"Public divisé sur la crédibilité avec {int(neutral_ratio*100)}% de neutralité = opportunité"
+        elif negative_ratio > 0.4:
+            signal_principal = f"Sentiment critique prédominant ({int(negative_ratio*100)}%) nécessitant réponse immédiate"
+        elif peak_detected and peak_week:
+            signal_principal = f"Pic inhabituel en {peak_week['week']} - {peak_week['mentions']} mentions"
+        else:
+            signal_principal = "Situation stable avec opinion malléable"
+        
+        # === TENDANCE GLOBALE ===
+        if len(weekly_data) >= 2:
+            first_week = weekly_data[0]['mentions']
+            last_week = weekly_data[-1]['mentions']
+            change_pct = ((last_week - first_week) / first_week * 100) if first_week > 0 else 0
+            
+            if change_pct > 20:
+                trend = f"↗ +{int(change_pct)}% (en croissance)"
+            elif change_pct < -20:
+                trend = f"↘ {int(change_pct)}% (en déclin)"
+            else:
+                trend = "→ Stable"
+        else:
+            trend = "Données insuffisantes"
+        
+        # === INSIGHT CLÉ ===
+        if neutral_ratio > 0.6:
+            insight = f"💡 Les {int(neutral_ratio*100)}% de mentions neutres représentent un public encore malléable. Campagne de transparence sur le processus dans les 7 prochains jours peut convertir 40-60% de ce segment en opinion favorable."
+        elif negative_ratio > 0.5:
+            insight = f"⚠️ Seuil critique avec {int(negative_ratio*100)}% de sentiment négatif. Mise en place urgente d'une cellule de crise et engagement direct avec les influenceurs critiques sous 48h requis."
+        elif peak_detected:
+            insight = f"📊 Pic d'engagement corrélé avec [événement spécifique à identifier]. La baisse relative en dernière semaine suggère un essoufflement - maintenir la pression communicationnelle."
+        else:
+            insight = f"✅ Situation maîtrisée: {total_mentions} mentions sur {days} jours (moyenne {total_mentions/days:.1f}/jour). Capitaliser sur la dynamique positive et maintenir la surveillance standard."
+        
+        # === ACTION PRIORITAIRE ===
+        if risk_level == 'ÉLEVÉ':
+            action_prioritaire = "Engagement immédiat avec les 3 influenceurs majeurs + publication calendrier détaillé dans les 48h"
+        elif neutral_ratio > 0.6:
+            action_prioritaire = "Campagne de transparence sur le processus électoral dans les 7 prochains jours"
+        else:
+            action_prioritaire = "Maintenir surveillance + capitaliser sur acquis positifs"
+        
         return {
             'risk_level': risk_level,
             'risk_score': round(risk_score, 1),
             'color': color,
-            'explanation': f"Niveau de risque {risk_level} déterminé par l'analyse de {total_mentions} mentions sur {days} jours.",
+            'explanation': f"Niveau de risque {risk_level} ({risk_score:.1f}/100) basé sur {total_mentions} mentions analysées",
+            'signal_principal': signal_principal,
+            'trend': trend,
+            'insight': insight,
+            'action_prioritaire': action_prioritaire,
             'factors': {
-                'volume': {'score': round(volume_score * 100, 1), 'weight': '25%'},
-                'sentiment': {'score': round(sentiment_score * 100, 1), 'weight': '30%'},
-                'engagement': {'score': round(engagement_score * 100, 1), 'weight': '20%'},
-                'spike': {'score': round(spike_score * 100, 1), 'weight': '15%'},
-                'diversity': {'score': round(source_diversity_score * 100, 1), 'weight': '10%'}
-            }
+                'volume': {
+                    'score': round(volume_score * 100, 1), 
+                    'weight': '25%',
+                    'detail': f'{total_mentions} mentions ({total_mentions/days:.1f}/jour)'
+                },
+                'sentiment': {
+                    'score': round(sentiment_score * 100, 1), 
+                    'weight': '30%',
+                    'detail': f'Ratio négatif {int(negative_ratio*100)}%'
+                },
+                'engagement': {
+                    'score': round(engagement_score * 100, 1), 
+                    'weight': '20%',
+                    'detail': f'Pointe à {int(max_engagement)}'
+                },
+                'spike': {
+                    'score': round(spike_score * 100, 1), 
+                    'weight': '15%',
+                    'detail': '⚡ Pic détecté' if peak_detected else 'Stable'
+                },
+                'diversity': {
+                    'score': round(source_diversity_score * 100, 1), 
+                    'weight': '10%',
+                    'detail': f'{len(sources)} sources'
+                }
+            },
+            'evolution': weekly_data
         }
     
-    def _analyze_positive_sentiment(self, mentions: List) -> Dict:
-        """Analyse des jugements positifs avec contexte camerounais"""
-        if not mentions:
+    def _calculate_trend_icon(self, previous_weeks: List, current_count: int) -> str:
+        """Calculer l'icône de tendance"""
+        if not previous_weeks:
+            return "→"
+        
+        last_week_count = previous_weeks[-1]['mentions']
+        if current_count > last_week_count * 1.15:
+            return "↗↗"
+        elif current_count > last_week_count * 1.05:
+            return "↗"
+        elif current_count < last_week_count * 0.85:
+            return "↘"
+        else:
+            return "→"
+    
+    def _analyze_positive_sentiment_enriched(self, positive_mentions: List, all_mentions: List) -> Dict:
+        """Analyse enrichie des jugements positifs avec verbatims et contexte stratégique"""
+        if not positive_mentions:
             return {
                 'count': 0,
                 'percentage': 0,
-                'analysis': "Aucun commentaire positif identifié sur la période analysée.",
+                'analysis': "Aucun commentaire positif significatif identifié.",
                 'key_themes': [],
-                'top_mentions': [],
-                'strategic_context': "L'absence de réactions positives mérite une attention particulière dans le contexte des relations publiques institutionnelles."
+                'verbatims': [],
+                'strategic_context': "L'absence de réactions positives mérite une attention - opportunité de créer des narratifs favorables."
             }
         
-        # Analyse des thèmes
-        all_content = ' '.join([m.title + ' ' + m.content for m in mentions])
-        positive_themes = self._extract_positive_themes(all_content)
+        total = len(all_mentions)
+        percentage = (len(positive_mentions) / total * 100) if total > 0 else 0
         
-        # Top mentions engageantes
-        top_mentions = sorted(mentions, key=lambda x: x.engagement_score, reverse=True)[:5]
+        # Extraction thèmes positifs
+        themes = self._extract_themes(positive_mentions, positive=True)
+        
+        # Verbatims représentatifs (TOP 3)
+        top_verbatims = sorted(
+            positive_mentions, 
+            key=lambda m: m.engagement_score, 
+            reverse=True
+        )[:3]
+        
+        verbatims = []
+        for mention in top_verbatims:
+            verbatims.append({
+                'text': self._clean_text(mention.content[:200]),
+                'author': mention.author,
+                'source': mention.source,
+                'date': mention.published_at.strftime('%d/%m/%Y') if mention.published_at else 'N/A',
+                'engagement': int(mention.engagement_score)
+            })
         
         return {
-            'count': len(mentions),
-            'percentage': 0,  # Sera calculé dans la synthèse
-            'analysis': f"L'analyse révèle {len(mentions)} mentions à connotation positive, témoignant d'une réception favorable sur certains aspects. Ces réactions positives constituent un capital de confiance précieux qu'il convient de consolider et d'amplifier dans la stratégie de communication.",
-            'key_themes': positive_themes,
-            'top_mentions': [
-                {
-                    'title': m.title[:100] + '...' if len(m.title) > 100 else m.title,
-                    'author': m.author,
-                    'source': m.source,
-                    'engagement': m.engagement_score,
-                    'content_extract': m.content[:200] + '...' if len(m.content) > 200 else m.content
-                }
-                for m in top_mentions
-            ],
-            'strategic_context': "Ces réactions positives reflètent l'efficacité de certains messages institutionnels et constituent des leviers d'influence à exploiter pour renforcer l'adhésion populaire aux politiques publiques."
+            'count': len(positive_mentions),
+            'percentage': round(percentage, 1),
+            'analysis': f"L'analyse révèle {len(positive_mentions)} mentions à connotation positive ({percentage:.1f}% du total), témoignant d'une réception favorable sur certains aspects clés. Ces réactions constituent un capital de confiance précieux qu'il convient de consolider et d'amplifier stratégiquement.",
+            'key_themes': themes[:5],
+            'verbatims': verbatims,
+            'strategic_context': f"Ces {len(positive_mentions)} voix favorables reflètent l'efficacité de certains messages institutionnels. Amplifier ces narratifs via les influenceurs positifs (Mbong Mendzui type) pour élargir la base de soutien."
         }
     
-    def _analyze_negative_sentiment(self, mentions: List) -> Dict:
-        """Analyse des jugements négatifs avec enjeux stratégiques"""
-        if not mentions:
+    def _analyze_negative_sentiment_enriched(self, negative_mentions: List, all_mentions: List) -> Dict:
+        """Analyse enrichie des jugements négatifs avec préoccupations et contexte d'urgence"""
+        if not negative_mentions:
             return {
                 'count': 0,
                 'percentage': 0,
-                'analysis': "Aucun commentaire négatif significatif détecté sur la période.",
+                'analysis': "Aucun commentaire négatif significatif détecté.",
                 'key_concerns': [],
-                'top_mentions': [],
-                'strategic_context': "Cette absence de critiques majeures indique une période de relative stabilité dans l'opinion publique."
+                'verbatims': [],
+                'strategic_context': "Absence de critiques majeures - période de relative stabilité."
             }
         
-        # Analyse des préoccupations
-        all_content = ' '.join([m.title + ' ' + m.content for m in mentions])
-        negative_themes = self._extract_negative_themes(all_content)
+        total = len(all_mentions)
+        percentage = (len(negative_mentions) / total * 100) if total > 0 else 0
         
-        top_mentions = sorted(mentions, key=lambda x: x.engagement_score, reverse=True)[:5]
+        # Extraction préoccupations
+        concerns = self._extract_themes(negative_mentions, positive=False)
+        
+        # Verbatims critiques représentatifs (TOP 3 par engagement)
+        top_verbatims = sorted(
+            negative_mentions,
+            key=lambda m: m.engagement_score,
+            reverse=True
+        )[:3]
+        
+        verbatims = []
+        for mention in top_verbatims:
+            verbatims.append({
+                'text': self._clean_text(mention.content[:200]),
+                'author': mention.author,
+                'source': mention.source,
+                'date': mention.published_at.strftime('%d/%m/%Y') if mention.published_at else 'N/A',
+                'engagement': int(mention.engagement_score),
+                'alert_level': '🔴 ÉLEVÉ' if mention.engagement_score > 1000 else '🟡 MODÉRÉ'
+            })
+        
+        # Risque de viralisation
+        high_engagement_negative = [m for m in negative_mentions if m.engagement_score > 500]
+        viral_risk = "ÉLEVÉ" if len(high_engagement_negative) > 2 else "MODÉRÉ" if len(high_engagement_negative) > 0 else "FAIBLE"
         
         return {
-            'count': len(mentions),
-            'percentage': 0,
-            'analysis': f"L'analyse identifie {len(mentions)} mentions à caractère critique, révélant des points de tension dans l'opinion publique. Ces signaux d'alarme nécessitent une attention immédiate et une réponse stratégique adaptée pour prévenir toute escalade de la contestation.",
-            'key_concerns': negative_themes,
-            'top_mentions': [
-                {
-                    'title': m.title[:100] + '...' if len(m.title) > 100 else m.title,
-                    'author': m.author,
-                    'source': m.source,
-                    'engagement': m.engagement_score,
-                    'content_extract': m.content[:200] + '...' if len(m.content) > 200 else m.content
-                }
-                for m in top_mentions
-            ],
-            'strategic_context': "Ces critiques peuvent constituer le terreau d'une mobilisation plus large si elles ne sont pas traitées avec célérité. Une réponse coordonnée s'impose pour restaurer la confiance et neutraliser les narratifs défavorables."
+            'count': len(negative_mentions),
+            'percentage': round(percentage, 1),
+            'analysis': f"L'analyse identifie {len(negative_mentions)} mentions à caractère critique ({percentage:.1f}%), révélant des points de tension dans l'opinion publique. Ces signaux d'alarme nécessitent une attention immédiate et une réponse stratégique coordonnée pour prévenir toute escalade.",
+            'key_concerns': concerns[:5],
+            'verbatims': verbatims,
+            'viral_risk': viral_risk,
+            'strategic_context': f"Risque de viralisation {viral_risk} - {len(high_engagement_negative)} mentions critiques à fort engagement. Ces critiques peuvent constituer le terreau d'une mobilisation plus large si non traitées sous 48-72h. Engagement direct avec les auteurs majeurs recommandé."
         }
     
-    def _analyze_neutral_sentiment(self, mentions: List) -> Dict:
-        """Analyse des jugements neutres et leur potentiel d'influence"""
-        if not mentions:
+    def _analyze_neutral_sentiment_enriched(self, neutral_mentions: List, all_mentions: List) -> Dict:
+        """Analyse enrichie des jugements neutres avec potentiel d'influence"""
+        if not neutral_mentions:
             return {
                 'count': 0,
                 'percentage': 0,
-                'analysis': "Aucune mention neutre significative identifiée.",
+                'analysis': "Aucune mention neutre significative.",
                 'observation_themes': [],
-                'strategic_context': "L'absence de réactions neutres peut indiquer une polarisation forte de l'opinion publique."
+                'strategic_context': "Polarisation forte de l'opinion."
             }
         
-        all_content = ' '.join([m.title + ' ' + m.content for m in mentions])
-        neutral_themes = self._extract_neutral_themes(all_content)
+        total = len(all_mentions)
+        percentage = (len(neutral_mentions) / total * 100) if total > 0 else 0
+        
+        # Catégorisation des neutres
+        info_relays = [m for m in neutral_mentions if len(m.content) < 100]
+        factual_questions = [m for m in neutral_mentions if '?' in m.title or '?' in m.content]
+        
+        themes = self._extract_themes(neutral_mentions, positive=None)
         
         return {
-            'count': len(mentions),
-            'percentage': 0,
-            'analysis': f"Les {len(mentions)} mentions neutres reflètent une approche observatrice et factuelle de la part d'une frange de l'opinion publique. Cette neutralité représente un terreau fertile pour l'influence, ces audiences étant potentiellement réceptives à des arguments bien construits.",
-            'observation_themes': neutral_themes,
-            'strategic_context': "Ces voix neutres constituent un segment stratégique de l'opinion publique, susceptible de basculer vers le soutien avec une communication ciblée et persuasive. Leur conversion représente un enjeu majeur pour élargir la base de soutien institutionnel."
+            'count': len(neutral_mentions),
+            'percentage': round(percentage, 1),
+            'analysis': f"Les {len(neutral_mentions)} mentions neutres ({percentage:.1f}%) reflètent une approche observatrice et factuelle. Cette neutralité représente un terreau fertile pour l'influence, ces audiences étant potentiellement réceptives à des arguments bien construits.",
+            'observation_themes': themes[:5],
+            'breakdown': {
+                'relais_info': len(info_relays),
+                'questions_factuelles': len(factual_questions),
+                'comparaisons': len(neutral_mentions) - len(info_relays) - len(factual_questions)
+            },
+            'strategic_context': f"💡 OPPORTUNITÉ STRATÉGIQUE: Ces {len(neutral_mentions)} voix neutres constituent un segment clé susceptible de basculer avec une communication ciblée. Campagne d'information factuelle et transparente peut convertir 40-60% selon benchmarks régionaux."
         }
     
-    def _generate_judgment_synthesis(self, positive: List, negative: List, neutral: List) -> Dict:
-        """Synthèse stratégique des jugements publics"""
+    def _generate_enriched_synthesis(
+        self, 
+        positive: List, 
+        negative: List, 
+        neutral: List,
+        all_mentions: List,
+        days: int
+    ) -> Dict:
+        """Synthèse stratégique enrichie avec comparatif et recommandations"""
         total = len(positive) + len(negative) + len(neutral)
         
         if total == 0:
@@ -294,24 +436,41 @@ class CameroonReportGenerator:
                 'total_analyzed': 0,
                 'distribution': {},
                 'dominant_trend': 'Indéterminé',
-                'strategic_assessment': "Absence de données suffisantes pour établir une analyse de tendance.",
-                'recommendation': "Intensifier la collecte d'informations pour obtenir une vision claire de l'opinion publique."
+                'strategic_assessment': "Absence de données.",
+                'recommendation': "Intensifier la collecte."
             }
         
         pos_pct = (len(positive) / total) * 100
         neg_pct = (len(negative) / total) * 100
         neu_pct = (len(neutral) / total) * 100
         
-        # Déterminer la tendance dominante
+        # Ratio positif/négatif
+        ratio_pos_neg = len(positive) / len(negative) if len(negative) > 0 else float('inf')
+        
+        # Tendance dominante
         if pos_pct > neg_pct and pos_pct > neu_pct:
             dominant_trend = "Favorable"
-            trend_analysis = "Les réactions positives dominent le paysage médiatique, traduisant une adhésion majoritaire aux messages institutionnels."
+            trend_icon = "✅"
+            trend_analysis = f"Les réactions positives dominent ({pos_pct:.1f}%), traduisant une adhésion majoritaire aux messages institutionnels. Ratio positif/négatif de {ratio_pos_neg:.1f}:1."
         elif neg_pct > pos_pct and neg_pct > neu_pct:
             dominant_trend = "Critique"
-            trend_analysis = "Les réactions négatives prédominent, signalant une crise de confiance qui nécessite une réponse immédiate et coordonnée."
+            trend_icon = "⚠️"
+            trend_analysis = f"Les réactions négatives prédominent ({neg_pct:.1f}%), signalant une crise de confiance nécessitant réponse coordonnée immédiate."
         else:
-            dominant_trend = "Mitigé"
-            trend_analysis = "L'opinion publique apparaît divisée, révélant une opportunité de conquête des indécis par une communication stratégique ciblée."
+            dominant_trend = "Mitigé/Neutre"
+            trend_icon = "⚖️"
+            trend_analysis = f"L'opinion publique apparaît divisée avec {neu_pct:.1f}% de neutres, révélant une opportunité de conquête des indécis."
+        
+        # Comparaison avec période précédente (si données disponibles)
+        comparison_note = "Première période analysée - pas de comparaison disponible"
+        
+        # Fenêtre d'action
+        if neu_pct > 60:
+            window_action = "⏰ Fenêtre de 7 jours pour influencer le narratif"
+        elif neg_pct > 50:
+            window_action = "🚨 Fenêtre critique de 48h pour réponse urgente"
+        else:
+            window_action = "✅ Situation stable - capitaliser sur acquis"
         
         return {
             'total_analyzed': total,
@@ -320,24 +479,38 @@ class CameroonReportGenerator:
                 'negative': {'count': len(negative), 'percentage': round(neg_pct, 1)},
                 'neutral': {'count': len(neutral), 'percentage': round(neu_pct, 1)}
             },
-            'dominant_trend': dominant_trend,
+            'ratio_pos_neg': f"{ratio_pos_neg:.1f}:1" if ratio_pos_neg != float('inf') else "N/A",
+            'dominant_trend': f"{trend_icon} {dominant_trend}",
             'strategic_assessment': trend_analysis,
-            'recommendation': self._generate_strategic_recommendation(pos_pct, neg_pct, neu_pct)
+            'window_action': window_action,
+            'comparison': comparison_note,
+            'recommendation': self._generate_synthesis_recommendation(pos_pct, neg_pct, neu_pct)
         }
     
-    def _analyze_engaged_influencers(self, mentions: List) -> Dict:
-        """Analyse des influenceurs engagés (France 24 + liste camerounaise)"""
-        if not mentions:
+    def _generate_synthesis_recommendation(self, pos_pct: float, neg_pct: float, neu_pct: float) -> str:
+        """Générer recommandation basée sur distribution"""
+        if pos_pct > 50:
+            return "✅ Capitaliser sur l'élan positif: amplifier messages résonnants + communication cohérente et régulière."
+        elif neg_pct > 50:
+            return "🚨 URGENCE: Stratégie de gestion de crise - identifier sources mécontentement + contre-narratifs factuels + dialogue avec parties prenantes."
+        elif neu_pct > 40:
+            return "🎯 OPPORTUNITÉ: Cibler audiences neutres avec messages persuasifs et preuves tangibles pour conversion en soutiens actifs."
+        else:
+            return "⚖️ Approche équilibrée: consolider acquis positifs + adresser proactivement préoccupations voix critiques."
+    
+    def _analyze_engaged_influencers_enriched(self, targeted_mentions: List, all_mentions: List) -> Dict:
+        """Analyse enrichie des influenceurs avec profils détaillés et évaluation de risque"""
+        if not targeted_mentions:
             return {
                 'total_identified': 0,
-                'analysis': "Aucun influenceur significatif identifié sur la période.",
+                'analysis': "Aucun influenceur majeur identifié.",
                 'influencers_table': [],
-                'strategic_context': "L'absence d'engagement des influenceurs peut indiquer soit un désintérêt, soit une stratégie d'attentisme."
+                'strategic_context': "Désintérêt ou stratégie d'attentisme des leaders d'opinion."
             }
         
         # Regrouper par auteur
         influencer_data = {}
-        for mention in mentions:
+        for mention in targeted_mentions:
             author = mention.author
             if author not in influencer_data:
                 influencer_data[author] = {
@@ -352,13 +525,14 @@ class CameroonReportGenerator:
             if mention.sentiment:
                 influencer_data[author]['sentiment_distribution'][mention.sentiment] += 1
         
-        # Créer le tableau des influenceurs
+        # Créer tableau enrichi
         influencers_table = []
         for author, data in influencer_data.items():
             mention_count = len(data['mentions'])
-            avg_engagement = data['total_engagement'] / mention_count if mention_count > 0 else 0
+            total_eng = data['total_engagement']
+            avg_engagement = total_eng / mention_count
             
-            # Calculer le score de sentiment
+            # Analyser sentiment
             sentiment_dist = data['sentiment_distribution']
             total_sentiment = sum(sentiment_dist.values())
             
@@ -366,152 +540,232 @@ class CameroonReportGenerator:
                 pos_ratio = sentiment_dist['positive'] / total_sentiment
                 neg_ratio = sentiment_dist['negative'] / total_sentiment
                 
-                if pos_ratio > 0.6:
-                    sentiment_tendency = "Favorable"
+                if neg_ratio > 0.6:
+                    sentiment_tendency = "⚠️ Critique"
+                    risk_level = "ÉLEVÉ"
+                    risk_color = "#ef4444"
+                elif pos_ratio > 0.6:
+                    sentiment_tendency = "✅ Favorable"
                     risk_level = "Faible"
-                elif neg_ratio > 0.6:
-                    sentiment_tendency = "Critique"
-                    risk_level = "Élevé"
+                    risk_color = "#10b981"
                 else:
-                    sentiment_tendency = "Mitigé"
+                    sentiment_tendency = "⚖️ Mitigé"
                     risk_level = "Modéré"
+                    risk_color = "#f59e0b"
             else:
                 sentiment_tendency = "Indéterminé"
                 risk_level = "Modéré"
+                risk_color = "#6b7280"
             
-            # Identifier la plateforme principale
+            # Plateforme principale
             sources = [m.source for m in data['mentions']]
             main_platform = max(set(sources), key=sources.count) if sources else "Inconnu"
             
-            # Portée estimée (basée sur l'engagement)
-            if avg_engagement > 1000:
-                estimated_reach = "Très Élevée"
+            # Portée estimée
+            if avg_engagement > 50000:
+                estimated_reach = "🔥 Très Élevée (>100K)"
+            elif avg_engagement > 5000:
+                estimated_reach = "📈 Élevée (10K-100K)"
             elif avg_engagement > 500:
-                estimated_reach = "Élevée"
-            elif avg_engagement > 100:
-                estimated_reach = "Modérée"
+                estimated_reach = "📊 Modérée (1K-10K)"
             else:
-                estimated_reach = "Limitée"
+                estimated_reach = "📉 Limitée (<1K)"
+            
+            # Profil et recommandations
+            if risk_level == "ÉLEVÉ":
+                profile = "PRIORITÉ CRITIQUE"
+                action = "Engagement direct requis sous 48h"
+            elif avg_engagement > 10000:
+                profile = "INFLUENCEUR MAJEUR"
+                action = "Interview exclusive ou briefing privilégié"
+            else:
+                profile = "Influenceur Standard"
+                action = "Surveillance continue"
             
             influencers_table.append({
                 'name': author,
+                'profile': profile,
                 'platform': main_platform,
                 'mentions_count': mention_count,
-                'total_engagement': int(data['total_engagement']),
+                'total_engagement': int(total_eng),
                 'avg_engagement': int(avg_engagement),
                 'sentiment_tendency': sentiment_tendency,
                 'risk_level': risk_level,
+                'risk_color': risk_color,
                 'estimated_reach': estimated_reach,
-                'last_activity': max([m.published_at for m in data['mentions'] if m.published_at]).strftime('%d/%m/%Y') if data['mentions'] else 'N/A'
+                'last_activity': max([m.published_at for m in data['mentions'] if m.published_at]).strftime('%d/%m/%Y'),
+                'action_recommended': action
             })
         
         # Trier par engagement total
         influencers_table.sort(key=lambda x: x['total_engagement'], reverse=True)
         
+        # Analyse stratégique
+        high_risk_count = len([i for i in influencers_table if i['risk_level'] == 'ÉLEVÉ'])
+        major_influencers = len([i for i in influencers_table if 'MAJEUR' in i['profile'] or 'CRITIQUE' in i['profile']])
+        
+        strategic_analysis = f"Écosystème de {len(influencers_table)} influenceurs identifiés dont {high_risk_count} à risque ÉLEVÉ et {major_influencers} majeurs. "
+        
+        if high_risk_count > 0:
+            strategic_analysis += f"⚠️ ALERTE: {high_risk_count} influenceur(s) critique(s) nécessitant intervention prioritaire. "
+        
+        strategic_analysis += "Leur capacité de mobilisation en fait des acteurs stratégiques dans la formation de l'opinion publique camerounaise."
+        
         return {
             'total_identified': len(influencers_table),
-            'analysis': f"L'analyse identifie {len(influencers_table)} influenceurs actifs sur la période, constituant un écosystème d'opinion leaders aux orientations variées. Leur capacité de mobilisation et leur portée médiatique en font des acteurs stratégiques dans la formation de l'opinion publique camerounaise.",
+            'high_risk_count': high_risk_count,
+            'major_count': major_influencers,
+            'analysis': strategic_analysis,
             'influencers_table': influencers_table,
-            'strategic_context': "Ces influenceurs représentent des relais d'opinion cruciaux dans l'espace numérique camerounais. Leur engagement, positif ou négatif, peut amplifier considérablement la portée des messages institutionnels ou, inversement, alimenter des dynamiques de contestation. Une stratégie d'influence ciblée s'impose pour optimiser leur contribution à la communication gouvernementale."
+            'strategic_context': f"Ces {len(influencers_table)} influenceurs représentent des relais d'opinion cruciaux. {high_risk_count} voix critiques à fort engagement peuvent amplifier dynamiques de contestation. Stratégie d'influence ciblée recommandée: engagement direct avec top 3, briefings privilégiés, contenus exclusifs."
         }
     
-    def _extract_positive_themes(self, content: str) -> List[str]:
-        """Extraire les thèmes positifs du contenu"""
-        positive_keywords = [
-            'progrès', 'développement', 'amélioration', 'succès', 'réussite',
-            'bon', 'bien', 'excellent', 'félicitations', 'bravo',
-            'croissance', 'avancée', 'innovation', 'modernisation'
-        ]
+    def _generate_strategic_recommendations(self, report_data: Dict) -> Dict:
+        """Générer recommandations opérationnelles actionnables par priorité"""
+        risk = report_data.get('risk_assessment', {})
+        synthesis = report_data.get('judgment_synthesis', {})
+        influencers = report_data.get('engaged_influencers', {})
         
-        themes = []
-        content_lower = content.lower()
-        for keyword in positive_keywords:
-            if keyword in content_lower:
-                themes.append(keyword.title())
+        recommendations = {
+            'priority_1': [],
+            'priority_2': [],
+            'priority_3': []
+        }
         
-        return themes[:10]  # Limiter à 10 thèmes
+        # Priorité 1: Urgence (0-48h)
+        if risk.get('risk_level') == 'ÉLEVÉ':
+            recommendations['priority_1'].append({
+                'title': '🚨 Activation cellule de crise',
+                'action': 'Réunion d\'urgence état-major + identification porte-parole',
+                'deadline': '24h',
+                'impact': 'Coordination réponse stratégique'
+            })
+        
+        if influencers.get('high_risk_count', 0) > 0:
+            recommendations['priority_1'].append({
+                'title': '👑 Engagement influenceurs critiques',
+                'action': f"Contact direct avec les {influencers['high_risk_count']} influenceurs à risque ÉLEVÉ - proposition interview/briefing",
+                'deadline': '48h',
+                'impact': 'Neutraliser narratifs négatifs à la source'
+            })
+        
+        neutral_pct = synthesis.get('distribution', {}).get('neutral', {}).get('percentage', 0)
+        if neutral_pct > 50:
+            recommendations['priority_1'].append({
+                'title': '📢 Campagne de transparence',
+                'action': 'Publication calendrier électoral détaillé + mécanismes de contrôle + FAQ',
+                'deadline': '7 jours',
+                'impact': f'Conversion potentielle de 40-60% des {neutral_pct:.0f}% neutres'
+            })
+        
+        # Priorité 2: Court terme (7-14 jours)
+        recommendations['priority_2'].append({
+            'title': '📺 Série contenus éducatifs',
+            'action': '10 vidéos courtes (2-3min) processus électoral + distribution via influenceurs positifs',
+            'deadline': '14 jours',
+            'impact': 'Pédagogie de masse + confiance'
+        })
+        
+        recommendations['priority_2'].append({
+            'title': '🤝 Partenariat observateurs internationaux',
+            'action': 'Invitation publique Union Africaine, CEMAC, UE + communiqué conjoint',
+            'deadline': '14 jours',
+            'impact': 'Signal fort de transparence + légitimité'
+        })
+        
+        # Priorité 3: Moyen terme (14-30 jours)
+        recommendations['priority_3'].append({
+            'title': '🔍 Dashboard monitoring temps réel',
+            'action': 'Déploiement outils avec alertes automatiques + rapports hebdomadaires',
+            'deadline': '21 jours',
+            'impact': 'Détection précoce + réactivité'
+        })
+        
+        recommendations['priority_3'].append({
+            'title': '📊 Fact-checking proactif',
+            'action': 'Équipe dédiée (2 personnes) + réponses factuelles sous 2h',
+            'deadline': '30 jours',
+            'impact': 'Combat désinformation + crédibilité'
+        })
+        
+        return recommendations
     
-    def _extract_negative_themes(self, content: str) -> List[str]:
-        """Extraire les préoccupations du contenu négatif"""
-        negative_keywords = [
-            'problème', 'crise', 'échec', 'corruption', 'mauvais',
-            'inquiétude', 'préoccupation', 'critique', 'opposition',
-            'manifestation', 'grève', 'protestation', 'colère'
-        ]
-        
-        concerns = []
-        content_lower = content.lower()
-        for keyword in negative_keywords:
-            if keyword in content_lower:
-                concerns.append(keyword.title())
-        
-        return concerns[:10]
-    
-    def _extract_neutral_themes(self, content: str) -> List[str]:
-        """Extraire les thèmes d'observation neutre"""
-        neutral_keywords = [
-            'analyse', 'étude', 'rapport', 'données', 'statistiques',
-            'observation', 'constat', 'information', 'annonce',
-            'décision', 'mesure', 'politique', 'programme'
-        ]
-        
-        themes = []
-        content_lower = content.lower()
-        for keyword in neutral_keywords:
-            if keyword in content_lower:
-                themes.append(keyword.title())
-        
-        return themes[:10]
-    
-    def _generate_strategic_recommendation(self, pos_pct: float, neg_pct: float, neu_pct: float) -> str:
-        """Générer une recommandation stratégique basée sur la distribution"""
-        if pos_pct > 50:
-            return "Capitaliser sur l'élan positif en amplifiant les messages qui résonnent favorablement auprès du public. Maintenir la dynamique par une communication cohérente et régulière."
-        elif neg_pct > 50:
-            return "Mise en place urgente d'une stratégie de gestion de crise : identifier les sources de mécontentement, développer des contre-narratifs factuels, et engager un dialogue constructif avec les parties prenantes."
-        elif neu_pct > 40:
-            return "Opportunité de conquête : cibler les audiences neutres avec des messages persuasifs et des preuves tangibles pour les convertir en soutiens actifs."
+    def _extract_themes(self, mentions: List, positive: Optional[bool] = None) -> List[str]:
+        """Extraire thématiques récurrentes"""
+        if positive is True:
+            keywords = ['progrès', 'développement', 'amélioration', 'succès', 'réussite',
+                       'bon', 'bien', 'excellent', 'transparence', 'crédible', 'compétent',
+                       'expérience', 'réforme', 'garantie', 'indépendance']
+        elif positive is False:
+            keywords = ['problème', 'inquiétude', 'doute', 'critique', 'scepticisme',
+                       'corruption', 'manque', 'absence', 'promesse', 'déjà entendu',
+                       'garantie', 'confiance', 'transparence', 'composition', 'indépendance']
         else:
-            return "Approche équilibrée recommandée : consolider les acquis positifs tout en adressant proactivement les préoccupations exprimées par les voix critiques."
+            keywords = ['observation', 'question', 'information', 'date', 'calendrier',
+                       'modalité', 'processus', 'commission', 'électorale', 'scrutin']
+        
+        themes = []
+        all_text = ' '.join([m.title + ' ' + m.content for m in mentions]).lower()
+        
+        for keyword in keywords:
+            if keyword in all_text:
+                count = all_text.count(keyword)
+                if count >= 2:
+                    themes.append(f"{keyword.title()} ({count}×)")
+        
+        return sorted(themes, key=lambda x: int(x.split('(')[1].split('×')[0]), reverse=True)[:10]
+    
+    def _clean_text(self, text: str) -> str:
+        """Nettoyer texte pour verbatim"""
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'http\S+', '', text)
+        text = text.strip()
+        return text[:250] + '...' if len(text) > 250 else text
 
     def generate_cameroon_html_report(self, report_data: Dict) -> str:
-        """Générer le rapport HTML avec la structure en 5 sections"""
+        """Générer rapport HTML ultra-optimisé pour 2 pages avec contenu dense"""
         
+        # CSS ultra-optimisé pour maximiser contenu sur 2 pages
         html = f"""
         <!DOCTYPE html>
         <html>
         <head>
             <meta charset="UTF-8">
             <style>
-                @page {{ size: A4; margin: 1.5cm; }}
-                body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #333; line-height: 1.6; font-size: 11pt; }}
-                .header {{ text-align: center; padding: 15px 0; border-bottom: 3px solid #667eea; margin-bottom: 20px; }}
-                .header h1 {{ color: #667eea; font-size: 20pt; margin: 0 0 5px 0; }}
-                .header .subtitle {{ color: #666; font-size: 10pt; }}
-                .page-break {{ page-break-after: always; }}
-                .section-title {{ color: #667eea; font-size: 14pt; font-weight: bold; margin: 25px 0 15px 0; padding-bottom: 8px; border-bottom: 2px solid #e5e7eb; }}
-                .section-intro {{ background: #f8fafc; padding: 15px; border-left: 4px solid #667eea; margin: 15px 0; font-style: italic; }}
-                .risk-box {{ padding: 15px; border-radius: 8px; margin: 15px 0; border-left: 5px solid; }}
+                @page {{ size: A4; margin: 0.8cm; }}
+                body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.3; font-size: 8.5pt; margin: 0; padding: 0; }}
+                .header {{ text-align: center; padding: 8px 0; border-bottom: 2px solid #667eea; margin-bottom: 10px; }}
+                .header h1 {{ color: #667eea; font-size: 16pt; margin: 0 0 3px 0; font-weight: 700; }}
+                .header .subtitle {{ color: #6b7280; font-size: 7.5pt; line-height: 1.2; }}
+                .section-title {{ color: #667eea; font-size: 10pt; font-weight: bold; margin: 8px 0 5px 0; padding-bottom: 3px; border-bottom: 1px solid #e5e7eb; }}
+                .risk-box {{ padding: 8px; border-radius: 6px; margin: 6px 0; border-left: 3px solid; }}
                 .risk-high {{ background: #fef2f2; border-color: #ef4444; }}
                 .risk-medium {{ background: #fffbeb; border-color: #f59e0b; }}
                 .risk-low {{ background: #f0fdf4; border-color: #10b981; }}
-                .sentiment-positive {{ background: #f0fdf4; border-left: 4px solid #10b981; padding: 15px; margin: 10px 0; }}
-                .sentiment-negative {{ background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 10px 0; }}
-                .sentiment-neutral {{ background: #f9fafb; border-left: 4px solid #6b7280; padding: 15px; margin: 10px 0; }}
-                .metrics-grid {{ display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 15px 0; }}
-                .metric-card {{ background: #f9fafb; padding: 15px; border-radius: 8px; text-align: center; }}
-                .metric-value {{ font-size: 24pt; font-weight: bold; color: #667eea; }}
-                .metric-label {{ font-size: 10pt; color: #6b7280; margin-top: 5px; }}
-                table {{ width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 9pt; }}
-                th {{ background: #667eea; color: white; padding: 10px 8px; text-align: left; font-weight: bold; }}
-                td {{ padding: 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }}
+                .metric-grid {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 6px 0; }}
+                .metric-card {{ background: #f9fafb; padding: 6px; border-radius: 4px; text-align: center; }}
+                .metric-value {{ font-size: 11pt; font-weight: bold; color: #667eea; }}
+                .metric-label {{ font-size: 6.5pt; color: #6b7280; margin-top: 2px; }}
+                .sentiment-section {{ background: #f9fafb; padding: 8px; margin: 6px 0; border-left: 3px solid; border-radius: 4px; }}
+                .sentiment-positive {{ border-color: #10b981; }}
+                .sentiment-negative {{ border-color: #ef4444; }}
+                .sentiment-neutral {{ border-color: #6b7280; }}
+                .verbatim {{ font-style: italic; background: #f8fafc; padding: 6px; border-left: 2px solid #cbd5e1; margin: 4px 0; font-size: 7.5pt; }}
+                table {{ width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 7pt; }}
+                th {{ background: #667eea; color: white; padding: 4px 3px; text-align: left; font-weight: 600; font-size: 7pt; }}
+                td {{ padding: 4px 3px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }}
                 tr:nth-child(even) {{ background: #f9fafb; }}
-                .influencer-risk-high {{ background: #fef2f2; }}
-                .influencer-risk-medium {{ background: #fffbeb; }}
-                .influencer-risk-low {{ background: #f0fdf4; }}
-                .footer {{ position: fixed; bottom: 0; left: 0; right: 0; text-align: center; font-size: 8pt; color: #9ca3af; padding: 10px; border-top: 1px solid #e5e7eb; }}
-                .mention-quote {{ font-style: italic; background: #f8fafc; padding: 10px; border-left: 3px solid #ccc; margin: 10px 0; }}
-                .synthesis-box {{ background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 20px; border-radius: 10px; margin: 20px 0; }}
+                .alert-high {{ background: #fef2f2; color: #b91c1c; }}
+                .alert-medium {{ background: #fffbeb; color: #92400e; }}
+                .alert-low {{ background: #f0fdf4; color: #065f46; }}
+                .two-col {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }}
+                .insight {{ background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 8px; border-radius: 6px; margin: 6px 0; font-size: 8pt; }}
+                .rec-box {{ background: #eff6ff; border-left: 3px solid #3b82f6; padding: 6px; margin: 4px 0; font-size: 7.5pt; }}
+                .page-break {{ page-break-after: always; }}
+                strong {{ font-weight: 600; }}
+                p {{ margin: 3px 0; }}
+                ul {{ margin: 3px 0; padding-left: 15px; }}
+                li {{ margin: 2px 0; }}
             </style>
         </head>
         <body>
@@ -521,117 +775,185 @@ class CameroonReportGenerator:
             <h1>🇨🇲 RAPPORT D'ANALYSE - OPINION PUBLIQUE CAMEROUNAISE</h1>
             <div class="subtitle">
                 <strong>{report_data['report_object']}</strong><br>
-                Période: {report_data['period_days']} jours | 
-                Généré le: {report_data['generated_at'].strftime('%d/%m/%Y à %H:%M')}<br>
-                <em>Mots-clés analysés: {', '.join(report_data['keywords'])}</em>
+                Période: {report_data['period_days']} jours | Généré: {report_data['generated_at'].strftime('%d/%m/%Y %H:%M')}<br>
+                Mots-clés: {', '.join(report_data['keywords'])} | Total mentions: {report_data['total_mentions']}
             </div>
         </div>
         """
         
-        # 1. Évaluation de gravité
+        # 1. Évaluation de gravité enrichie
         if 'risk_assessment' in report_data:
             risk = report_data['risk_assessment']
             risk_class = 'risk-high' if risk['risk_level'] == 'ÉLEVÉ' else 'risk-medium' if risk['risk_level'] == 'MODÉRÉ' else 'risk-low'
             
             html += f"""
-            <div class="section-title">🚨 ÉVALUATION DE LA GRAVITÉ</div>
+            <div class="section-title">🚨 ÉVALUATION DE GRAVITÉ</div>
             <div class="risk-box {risk_class}">
-                <h3 style="margin: 0 0 10px 0;">NIVEAU DE RISQUE: {risk['risk_level']} ({risk['risk_score']}/100)</h3>
-                <p><strong>Analyse:</strong> {risk['explanation']}</p>
-                
+                <strong style="font-size: 11pt;">NIVEAU: {risk['risk_level']} ({risk['risk_score']}/100)</strong>
+                <p><strong>Signal:</strong> {risk['signal_principal']}</p>
+                <p><strong>Tendance:</strong> {risk['trend']} | <strong>Action:</strong> {risk['action_prioritaire']}</p>
+            </div>
+            
+            <div class="metric-grid">
+            """
+            
+            for factor_name, factor_data in risk['factors'].items():
+                html += f"""
+                <div class="metric-card">
+                    <div class="metric-value">{factor_data['score']}</div>
+                    <div class="metric-label">{factor_name.title()}<br>{factor_data['detail']}</div>
+                </div>
+                """
+            
+            html += f"""
+            </div>
+            
+            <div class="insight">
+                💡 <strong>Insight clé:</strong> {risk['insight']}
             </div>
             """
+            
+            # Évolution temporelle compacte
+            if risk.get('evolution'):
+                html += "<p style='font-size:7.5pt; margin:4px 0;'><strong>Évolution:</strong> "
+                for week in risk['evolution']:
+                    html += f"{week['week']}: {week['mentions']} mentions {week.get('trend', '')} | "
+                html += "</p>"
         
-        # 2. Jugements positifs
+        # 2. Jugements positifs (compacté)
         if 'positive_analysis' in report_data:
             pos = report_data['positive_analysis']
             html += f"""
-            <div class="section-title">😊 JUGEMENTS POSITIFS DES INTERNAUTES</div>
-            
-            <div class="sentiment-positive">
-                <h4>Analyse des Réactions Favorables ({pos['count']} mentions)</h4>
-                <p>{pos['analysis']}</p>
-                
-            </div>
+            <div class="section-title">😊 JUGEMENTS POSITIFS ({pos['count']} - {pos['percentage']}%)</div>
+            <div class="sentiment-section sentiment-positive">
+                <p><strong>Analyse:</strong> {pos['analysis']}</p>
+                <p><strong>Thèmes clés:</strong> {', '.join(pos['key_themes'][:5]) if pos['key_themes'] else 'N/A'}</p>
             """
+            
+            if pos.get('verbatims'):
+                for v in pos['verbatims'][:2]:
+                    html += f"""
+                    <div class="verbatim">"{v['text']}" - <strong>{v['author']}</strong> ({v['source']}, {v['date']}) [{v['engagement']} eng.]</div>
+                    """
+            
+            html += f"<p style='font-size:7.5pt; margin-top:4px;'><strong>🎯 Contexte:</strong> {pos['strategic_context']}</p></div>"
         
-        # 3. Jugements négatifs
+        # 3. Jugements négatifs (compacté)
         if 'negative_analysis' in report_data:
             neg = report_data['negative_analysis']
             html += f"""
-            <div class="section-title">😞 JUGEMENTS NÉGATIFS DES INTERNAUTES</div>
-            <div class="sentiment-negative">
-                <h4>Analyse des Réactions Critiques ({neg['count']} mentions)</h4>
-                <p>{neg['analysis']}</p>
-                
-            </div>
+            <div class="section-title">😞 JUGEMENTS NÉGATIFS ({neg['count']} - {neg['percentage']}%)</div>
+            <div class="sentiment-section sentiment-negative">
+                <p><strong>Analyse:</strong> {neg['analysis']}</p>
+                <p><strong>Préoccupations:</strong> {', '.join(neg['key_concerns'][:5]) if neg['key_concerns'] else 'N/A'} | <strong>Risque viral:</strong> {neg.get('viral_risk', 'N/A')}</p>
             """
+            
+            if neg.get('verbatims'):
+                for v in neg['verbatims'][:2]:
+                    html += f"""
+                    <div class="verbatim">{v['alert_level']} "{v['text']}" - <strong>{v['author']}</strong> ({v['source']}) [{v['engagement']} eng.]</div>
+                    """
+            
+            html += f"<p style='font-size:7.5pt; margin-top:4px;'><strong>⚠️ Contexte:</strong> {neg['strategic_context']}</p></div>"
         
-        # 4. Jugements neutres
+        # 4. Jugements neutres (ultra-compacté)
         if 'neutral_analysis' in report_data:
             neu = report_data['neutral_analysis']
             html += f"""
-            <div class="section-title">😐 JUGEMENTS NEUTRES DES INTERNAUTES</div>
-            <div class="sentiment-neutral">
-                <h4>Analyse des Réactions Neutres ({neu['count']} mentions)</h4>
+            <div class="section-title">😐 JUGEMENTS NEUTRES ({neu['count']} - {neu['percentage']}%)</div>
+            <div class="sentiment-section sentiment-neutral">
                 <p>{neu['analysis']}</p>
-                
-               
+                <p><strong>Thèmes:</strong> {', '.join(neu['observation_themes'][:5]) if neu['observation_themes'] else 'N/A'}</p>
+                <p style='font-size:7.5pt;'><strong>💡 {neu['strategic_context']}</strong></p>
             </div>
             """
         
-        # 5. Synthèse des jugements
+        # === SAUT DE PAGE ===
+        html += '<div class="page-break"></div>'
+        
+        # 5. Synthèse (début page 2)
         if 'judgment_synthesis' in report_data:
             synth = report_data['judgment_synthesis']
             html += f"""
             <div class="section-title">📊 SYNTHÈSE DES JUGEMENTS</div>
-            <div class="synthesis-box">
-                <h4 style="margin-top: 0; color: white;">Tendance Dominante: {synth['dominant_trend']}</h4>
-                <p style="margin-bottom: 0;">{synth['strategic_assessment']}</p>
+            <div class="insight">
+                <strong>Tendance: {synth['dominant_trend']}</strong> | Ratio P/N: {synth.get('ratio_pos_neg', 'N/A')}<br>
+                {synth['strategic_assessment']}<br>
+                <strong>{synth.get('window_action', '')}</strong>
             </div>
-            
-            
+            <p style='font-size:7.5pt; background:#f0f9ff; padding:5px; margin:4px 0; border-radius:4px;'>
+                <strong>📌 Recommandation:</strong> {synth['recommendation']}
+            </p>
             """
         
-        # 6. Influenceurs engagés
+        # 6. Influenceurs (compacté avec tableau dense)
         if 'engaged_influencers' in report_data:
             inf = report_data['engaged_influencers']
             html += f"""
-            <div class="section-title">👑 Principaux influenceurs engagés </div>
-            
-            <p><strong>Analyse:</strong> {inf['analysis']}</p>
+            <div class="section-title">👑 INFLUENCEURS ENGAGÉS ({inf['total_identified']})</div>
+            <p style='font-size:7.5pt; margin:4px 0;'>{inf['analysis']}</p>
             
             <table>
                 <tr>
                     <th>Influenceur</th>
+                    <th>Profil</th>
                     <th>Plateforme</th>
                     <th>Mentions</th>
-                    <th>Engagement Total</th>
-                    <th>Portée Estimée</th>
-                    <th>Niveau de Risque</th>
-                    <th>Dernière Activité</th>
+                    <th>Engagement</th>
+                    <th>Portée</th>
+                    <th>Tendance</th>
+                    <th>Risque</th>
+                    <th>Action</th>
                 </tr>
             """
             
-            for influencer in inf['influencers_table']:
-                risk_class = 'influencer-risk-high' if influencer['risk_level'] == 'Élevé' else 'influencer-risk-medium' if influencer['risk_level'] == 'Modéré' else 'influencer-risk-low'
+            for influencer in inf['influencers_table'][:8]:
+                risk_class = 'alert-high' if influencer['risk_level'] == 'ÉLEVÉ' else 'alert-medium' if influencer['risk_level'] == 'Modéré' else 'alert-low'
                 
                 html += f"""
                     <tr class="{risk_class}">
-                        <td><strong>{influencer['name']}</strong></td>
+                        <td><strong>{influencer['name'][:30]}</strong></td>
+                        <td>{influencer['profile']}</td>
                         <td>{influencer['platform']}</td>
                         <td>{influencer['mentions_count']}</td>
                         <td>{influencer['total_engagement']:,}</td>
                         <td>{influencer['estimated_reach']}</td>
+                        <td>{influencer['sentiment_tendency']}</td>
                         <td><strong>{influencer['risk_level']}</strong></td>
-                        <td>{influencer['last_activity']}</td>
+                        <td style='font-size:6.5pt;'>{influencer['action_recommended']}</td>
                     </tr>
                 """
             
-            html += "</table>"
+            html += f"</table><p style='font-size:7.5pt; margin:4px 0;'><strong>🎯 Contexte:</strong> {inf['strategic_context']}</p>"
         
+        # 7. Recommandations stratégiques (ultra-compacté)
+        if 'recommendations' in report_data:
+            recs = report_data['recommendations']
+            html += f"""
+            <div class="section-title">🎯 RECOMMANDATIONS OPÉRATIONNELLES</div>
+            <div class="two-col">
+            """
+            
+            for priority_level in ['priority_1', 'priority_2']:
+                priority_label = "PRIORITÉ 1 (0-48h)" if priority_level == 'priority_1' else "PRIORITÉ 2 (7-14j)"
+                html += f"<div><p style='font-weight:600; font-size:8pt; margin:4px 0;'>{priority_label}</p>"
+                
+                for rec in recs.get(priority_level, [])[:3]:
+                    html += f"""
+                    <div class="rec-box">
+                        <strong>{rec['title']}</strong><br>
+                        <span style='font-size:7pt;'>{rec['action']}</span><br>
+                        <span style='font-size:6.5pt; color:#3b82f6;'>⏰ {rec['deadline']} | 📈 {rec['impact']}</span>
+                    </div>
+                    """
+                
+                html += "</div>"
+            
+            html += "</div>"
+        
+        # Footer
         html += """
-            <div class="footer">
+            <div style="margin-top:10px; padding-top:6px; border-top:1px solid #e5e7eb; text-align:center; font-size:6.5pt; color:#9ca3af;">
                 Rapport généré par Superviseur MINDEF | Confidentiel - Usage interne uniquement | République du Cameroun
             </div>
         </body>
@@ -641,7 +963,7 @@ class CameroonReportGenerator:
         return html
 
     def generate_cameroon_pdf(self, report_data: Dict) -> bytes:
-        """Générer le PDF du rapport camerounais"""
+        """Générer le PDF du rapport enrichi"""
         try:
             from weasyprint import HTML
             
