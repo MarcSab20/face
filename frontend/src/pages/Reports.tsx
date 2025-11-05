@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import {
-  FileText,
+  Brain,
   Download,
   Eye,
   Settings,
@@ -10,7 +10,7 @@ import {
   X,
   Loader2,
   Plus,
-  Trash2,
+  Zap,
   AlertTriangle,
   TrendingUp,
   Users,
@@ -18,7 +18,11 @@ import {
   Target,
   BarChart3,
   MessageSquare,
-  Shield
+  Shield,
+  Globe,
+  Sparkles,
+  Cpu,
+  Activity
 } from 'lucide-react';
 import { Card, Badge, PageLoading, Modal, Alert, Tabs } from '@/components/ui/index';
 import toast from 'react-hot-toast';
@@ -33,55 +37,43 @@ interface KeywordOption {
   last_collected: string | null;
 }
 
-interface EnhancedReportPreview {
+interface IntelligentReportPreview {
   keywords: string[];
   keyword_ids: number[];
   period_days: number;
   total_mentions: number;
-  has_analysis: boolean;
-  has_risk_assessment: boolean;
-  has_trends: boolean;
-  has_influencers: boolean;
-  has_geography: boolean;
-  risk_level?: string;
+  estimated_web_sources: number;
+  ai_models_available: string[];
+  processing_time_estimate: string;
+  risk_level_preview?: string;
 }
 
-interface ReportSection {
-  id: string;
+interface AIModelStatus {
+  name: string;
+  available: boolean;
+  description: string;
+  performance: string;
+}
+
+interface AICapability {
   name: string;
   description: string;
-  icon: string;
-  required: boolean;
+  agent: string;
+  features: string[];
 }
 
-interface ReportTemplate {
-  id: string;
-  name: string;
-  description: string;
-  sections: string[];
-  duration: string;
-  audience: string;
-}
-
-export default function EnhancedReports() {
+export default function IntelligentReports() {
   const [selectedKeywords, setSelectedKeywords] = useState<number[]>([]);
   const [periodDays, setPeriodDays] = useState(30);
   const [reportObject, setReportObject] = useState('');
-  const [selectedSections, setSelectedSections] = useState<string[]>([
-    'analysis',
-    'risk_assessment',
-    'trends',
-    'detailed_influencers',
-    'geography',
-    'comparison',
-    'recommendations'
-  ]);
+  const [includeWebAnalysis, setIncludeWebAnalysis] = useState(true);
+  const [aiModel, setAiModel] = useState('mistral:7b');
   const [format, setFormat] = useState<'pdf' | 'html'>('pdf');
   const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showAIStatusModal, setShowAIStatusModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [previewData, setPreviewData] = useState<EnhancedReportPreview | null>(null);
-  const [activeTab, setActiveTab] = useState<'config' | 'templates' | 'methodology'>('config');
+  const [previewData, setPreviewData] = useState<IntelligentReportPreview | null>(null);
+  const [activeTab, setActiveTab] = useState<'config' | 'ai-status' | 'capabilities' | 'examples'>('config');
 
   // Charger les mots-clés disponibles
   const { data: keywordsData, isLoading: loadingKeywords } = useQuery({
@@ -94,41 +86,42 @@ export default function EnhancedReports() {
     },
   });
 
-  // Charger les sections disponibles
-  const { data: sectionsData } = useQuery({
-    queryKey: ['reportSections'],
+  // Charger le statut de l'IA
+  const { data: aiStatusData } = useQuery({
+    queryKey: ['aiStatus'],
     queryFn: async () => {
-      const response = await axios.get<{ sections: ReportSection[]; default_sections: string[] }>(
-        `${API_BASE_URL}/api/reports/sections-available`
-      );
+      const response = await axios.get<{
+        ai_service_available: boolean;
+        models: AIModelStatus[];
+        recommendation: string;
+      }>(`${API_BASE_URL}/api/intelligent-reports/ai-status`);
       return response.data;
     },
   });
 
-  // Charger les templates
-  const { data: templatesData } = useQuery({
-    queryKey: ['reportTemplates'],
-    queryFn: async () => {
-      const response = await axios.get<{ templates: ReportTemplate[] }>(
-        `${API_BASE_URL}/api/reports/templates`
-      );
-      return response.data;
-    },
-  });
-
-  // Charger la méthodologie de risque
-  const { data: methodologyData } = useQuery({
-    queryKey: ['riskMethodology'],
+  // Charger les capacités IA
+  const { data: capabilitiesData } = useQuery({
+    queryKey: ['aiCapabilities'],
     queryFn: async () => {
       const response = await axios.get(
-        `${API_BASE_URL}/api/reports/risk-methodology`
+        `${API_BASE_URL}/api/intelligent-reports/capabilities`
       );
       return response.data;
     },
   });
 
-  const sections = sectionsData?.sections || [];
-  const templates = templatesData?.templates || [];
+  // Charger les exemples
+  const { data: examplesData } = useQuery({
+    queryKey: ['aiExamples'],
+    queryFn: async () => {
+      const response = await axios.get(
+        `${API_BASE_URL}/api/intelligent-reports/examples`
+      );
+      return response.data;
+    },
+  });
+
+  const keywords = keywordsData?.keywords || [];
 
   const toggleKeyword = (keywordId: number) => {
     setSelectedKeywords((prev) =>
@@ -138,31 +131,9 @@ export default function EnhancedReports() {
     );
   };
 
-  const toggleSection = (sectionId: string) => {
-    const section = sections.find(s => s.id === sectionId);
-    if (section?.required) return; // Ne pas permettre de désélectionner les sections requises
-    
-    setSelectedSections((prev) =>
-      prev.includes(sectionId)
-        ? prev.filter((s) => s !== sectionId)
-        : [...prev, sectionId]
-    );
-  };
-
-  const applyTemplate = (template: ReportTemplate) => {
-    setSelectedSections(template.sections);
-    setShowTemplateModal(false);
-    toast.success(`Template "${template.name}" appliqué !`);
-  };
-
   const handleGenerateReport = async () => {
     if (selectedKeywords.length === 0) {
       toast.error('Veuillez sélectionner au moins un mot-clé');
-      return;
-    }
-
-    if (selectedSections.length === 0) {
-      toast.error('Veuillez sélectionner au moins une section');
       return;
     }
 
@@ -171,16 +142,22 @@ export default function EnhancedReports() {
       return;
     }
 
+    if (!aiStatusData?.ai_service_available) {
+      toast.error('Service IA non disponible. Vérifiez la configuration.');
+      return;
+    }
+
     setIsGenerating(true);
 
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/reports/generate_enhanced_report`,
+        `${API_BASE_URL}/api/intelligent-reports/generate`,
         {
           keyword_ids: selectedKeywords,
           days: periodDays,
           report_object: reportObject,
-          include_sections: selectedSections,
+          include_web_analysis: includeWebAnalysis,
+          ai_model: aiModel,
           format: format,
         },
         {
@@ -189,28 +166,28 @@ export default function EnhancedReports() {
       );
 
       if (format === 'pdf') {
-        // Télécharger le PDF enrichi
+        // Télécharger le PDF intelligent
         const blob = new Blob([response.data], { type: 'application/pdf' });
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `rapport_enrichi_${reportObject.substring(0, 30)}_${new Date().toISOString().split('T')[0]}.pdf`;
+        link.download = `rapport_intelligent_${reportObject.substring(0, 30)}_${new Date().toISOString().split('T')[0]}.pdf`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
 
-        toast.success('Rapport enrichi PDF généré avec succès !');
+        toast.success('🤖 Rapport intelligent généré avec succès !');
       } else {
         // Ouvrir HTML dans nouvel onglet
         const blob = new Blob([response.data], { type: 'text/html' });
         const url = window.URL.createObjectURL(blob);
         window.open(url, '_blank');
-        toast.success('Rapport enrichi HTML généré !');
+        toast.success('🤖 Rapport intelligent HTML généré !');
       }
     } catch (error) {
-      console.error('Erreur génération rapport enrichi:', error);
-      toast.error('Erreur lors de la génération du rapport enrichi');
+      console.error('Erreur génération rapport intelligent:', error);
+      toast.error('Erreur lors de la génération du rapport intelligent');
     } finally {
       setIsGenerating(false);
     }
@@ -223,8 +200,8 @@ export default function EnhancedReports() {
     }
 
     try {
-      const response = await axios.post<EnhancedReportPreview>(
-        `${API_BASE_URL}/api/reports/preview-enhanced`,
+      const response = await axios.post<IntelligentReportPreview>(
+        `${API_BASE_URL}/api/intelligent-reports/preview`,
         selectedKeywords,
         {
           params: { days: periodDays }
@@ -237,12 +214,6 @@ export default function EnhancedReports() {
     }
   };
 
-  if (loadingKeywords) {
-    return <PageLoading message="Chargement des mots-clés..." />;
-  }
-
-  const keywords = keywordsData?.keywords || [];
-
   const getRiskColor = (riskLevel?: string) => {
     switch (riskLevel) {
       case 'ÉLEVÉ': return 'text-red-600';
@@ -252,38 +223,41 @@ export default function EnhancedReports() {
     }
   };
 
-  const getSectionIcon = (sectionId: string) => {
-    const icons: Record<string, any> = {
-      analysis: BarChart3,
-      risk_assessment: Shield,
-      trends: TrendingUp,
-      key_content: MessageSquare,
-      detailed_influencers: Users,
-      geography: MapPin,
-      comparison: BarChart3,
-      recommendations: Target
-    };
-    return icons[sectionId] || FileText;
-  };
+  if (loadingKeywords) {
+    return <PageLoading message="Chargement de l'interface IA..." />;
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-          📊 Génération de Rapports Enrichis
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
+          🤖 Rapports Intelligents IA
+          <Badge variant="primary" >
+            <Sparkles className="w-4 h-4 mr-1" />
+            IA Souveraine
+          </Badge>
         </h1>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-          Rapports analytiques avancés avec évaluation de risque et recommandations opérationnelles
+          Génération automatique de rapports avec analyse IA avancée et lecture web
         </p>
       </div>
+
+      {/* Alerte statut IA */}
+      {aiStatusData && !aiStatusData.ai_service_available && (
+        <Alert type="warning">
+          <Brain className="w-4 h-4" />
+          <span>Service IA non disponible. {aiStatusData.recommendation}</span>
+        </Alert>
+      )}
 
       {/* Tabs */}
       <Tabs
         tabs={[
           { id: 'config', label: 'Configuration', icon: Settings },
-          { id: 'templates', label: 'Templates', icon: FileText },
-          { id: 'methodology', label: 'Méthodologie', icon: Shield },
+          { id: 'ai-status', label: 'Statut IA', icon: Brain },
+          { id: 'capabilities', label: 'Capacités', icon: Zap },
+          { id: 'examples', label: 'Exemples', icon: Eye },
         ]}
         activeTab={activeTab}
         onChange={(id) => setActiveTab(id as any)}
@@ -297,9 +271,9 @@ export default function EnhancedReports() {
             {/* Objet du rapport */}
             <Card>
               <div className="flex items-center space-x-3 mb-4">
-                <FileText className="w-6 h-6 text-primary-500" />
+                <Target className="w-6 h-6 text-primary-500" />
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Objet du rapport
+                  Objet du rapport intelligent
                 </h2>
               </div>
               
@@ -307,21 +281,21 @@ export default function EnhancedReports() {
                 type="text"
                 value={reportObject}
                 onChange={(e) => setReportObject(e.target.value)}
-                placeholder="Ex: Évaluation de la réception du projet X, Analyse sentiment campagne Y..."
+                placeholder="Ex: Analyse IA de l'opinion publique sur le projet X..."
                 className="input"
                 maxLength={200}
               />
               <p className="text-xs text-gray-500 mt-1">
-                Cet objet apparaîtra en en-tête du rapport (max 200 caractères)
+                Décrivez l'objectif de votre analyse IA (max 200 caractères)
               </p>
             </Card>
 
             {/* Sélection mots-clés */}
             <Card>
               <div className="flex items-center space-x-3 mb-4">
-                <Settings className="w-6 h-6 text-primary-500" />
+                <MessageSquare className="w-6 h-6 text-primary-500" />
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Sélection des mots-clés
+                  Mots-clés pour l'analyse IA
                 </h2>
                 <Badge variant="primary">
                   {selectedKeywords.length} sélectionné{selectedKeywords.length > 1 ? 's' : ''}
@@ -335,7 +309,7 @@ export default function EnhancedReports() {
               ) : (
                 <>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    💡 Sélectionnez un ou plusieurs mots-clés pour combiner l'analyse
+                    🤖 L'IA analysera automatiquement le contenu de ces mots-clés
                   </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {keywords.map((keyword) => (
@@ -368,89 +342,77 @@ export default function EnhancedReports() {
               )}
             </Card>
 
-            {/* Période */}
+            {/* Configuration IA */}
             <Card>
               <div className="flex items-center space-x-3 mb-4">
-                <Calendar className="w-6 h-6 text-primary-500" />
+                <Brain className="w-6 h-6 text-primary-500" />
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Période d'analyse
+                  Configuration IA
                 </h2>
               </div>
 
-              <div className="grid grid-cols-4 gap-3">
-                {[7, 14, 30, 90].map((days) => (
-                  <button
-                    key={days}
-                    onClick={() => setPeriodDays(days)}
-                    className={`px-4 py-3 rounded-lg font-medium transition-colors ${
-                      periodDays === days
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
-                  >
-                    {days} jours
-                  </button>
-                ))}
-              </div>
-            </Card>
-
-            {/* Sections enrichies */}
-            <Card>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-3">
-                  <FileText className="w-6 h-6 text-primary-500" />
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                    Sections du rapport enrichi
-                  </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Période */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <Calendar className="w-4 h-4 inline mr-1" />
+                    Période d'analyse
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[7, 14, 30, 90].map((days) => (
+                      <button
+                        key={days}
+                        onClick={() => setPeriodDays(days)}
+                        className={`px-3 py-2 rounded-lg font-medium transition-colors text-sm ${
+                          periodDays === days
+                            ? 'bg-primary-500 text-white'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                        }`}
+                      >
+                        {days}j
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <button
-                  onClick={() => setShowTemplateModal(true)}
-                  className="btn btn-secondary"
-                >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Templates
-                </button>
+
+                {/* Modèle IA */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    <Cpu className="w-4 h-4 inline mr-1" />
+                    Modèle IA
+                  </label>
+                  <select
+                    value={aiModel}
+                    onChange={(e) => setAiModel(e.target.value)}
+                    className="input"
+                  >
+                    <option value="mistral:7b">Mistral 7B (Recommandé)</option>
+                    <option value="llama2:7b">Llama 2 7B</option>
+                    <option value="codellama:7b">CodeLlama 7B</option>
+                    <option value="neural-chat:7b">Neural Chat 7B</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="space-y-3">
-                {sections.map((section) => {
-                  const IconComponent = getSectionIcon(section.id);
-                  const isSelected = selectedSections.includes(section.id);
-                  const isRequired = section.required;
-                  
-                  return (
-                    <button
-                      key={section.id}
-                      onClick={() => toggleSection(section.id)}
-                      disabled={isRequired}
-                      className={`w-full p-4 rounded-xl border-2 text-left transition-all ${
-                        isSelected
-                          ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300'
-                      } ${isRequired ? 'opacity-75' : ''}`}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-2xl">{section.icon}</span>
-                          <span className="font-semibold text-gray-900 dark:text-white">
-                            {section.name}
-                          </span>
-                          {isRequired && (
-                            <Badge variant="warning" size="sm">Requis</Badge>
-                          )}
-                        </div>
-                        {isSelected ? (
-                          <Check className="w-5 h-5 text-primary-500" />
-                        ) : (
-                          <X className="w-5 h-5 text-gray-400" />
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                        {section.description}
-                      </p>
-                    </button>
-                  );
-                })}
+              {/* Options avancées */}
+              <div className="mt-4 space-y-3">
+                <label className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    checked={includeWebAnalysis}
+                    onChange={(e) => setIncludeWebAnalysis(e.target.checked)}
+                    className="w-5 h-5 text-primary-500 rounded focus:ring-primary-500"
+                  />
+                  <div>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      <Globe className="w-4 h-4 inline mr-1" />
+                      Analyse web approfondie
+                    </span>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      L'IA lira et analysera le contenu des articles et commentaires
+                    </p>
+                  </div>
+                </label>
               </div>
             </Card>
 
@@ -473,9 +435,9 @@ export default function EnhancedReports() {
                     <span className="text-2xl">📄</span>
                     {format === 'pdf' && <Check className="w-5 h-5 text-primary-500" />}
                   </div>
-                  <div className="font-semibold text-gray-900 dark:text-white">PDF Enrichi</div>
+                  <div className="font-semibold text-gray-900 dark:text-white">PDF Intelligent</div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Format professionnel, 4-5 pages avec analyses avancées
+                    Rapport professionnel avec analyses IA complètes
                   </p>
                 </button>
 
@@ -493,7 +455,7 @@ export default function EnhancedReports() {
                   </div>
                   <div className="font-semibold text-gray-900 dark:text-white">HTML Interactif</div>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Prévisualisation web enrichie
+                    Prévisualisation web avec insights IA
                   </p>
                 </button>
               </div>
@@ -503,8 +465,14 @@ export default function EnhancedReports() {
           {/* Résumé et actions */}
           <div className="space-y-6">
             <Card className="sticky top-6">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-                📋 Résumé du Rapport Enrichi
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+                🤖 Résumé Rapport IA
+                {aiStatusData?.ai_service_available && (
+                  <Badge variant="success" size="sm" >
+                    <Activity className="w-3 h-3 mr-1" />
+                    IA Active
+                  </Badge>
+                )}
               </h3>
 
               <div className="space-y-4">
@@ -516,7 +484,7 @@ export default function EnhancedReports() {
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Mots-clés</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Mots-clés IA</p>
                   <div className="flex flex-wrap gap-2">
                     {selectedKeywords.length === 0 ? (
                       <span className="text-gray-500 text-sm">Aucun sélectionné</span>
@@ -524,8 +492,8 @@ export default function EnhancedReports() {
                       selectedKeywords.map((id) => {
                         const kw = keywords.find((k) => k.id === id);
                         return kw ? (
-                          <Badge key={id} variant="primary">
-                            {kw.keyword}
+                          <Badge key={id} variant="primary" size="sm">
+                            🤖 {kw.keyword}
                           </Badge>
                         ) : null;
                       })
@@ -534,33 +502,25 @@ export default function EnhancedReports() {
                 </div>
 
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Période</p>
-                  <p className="font-semibold text-gray-900 dark:text-white">
-                    {periodDays} derniers jours
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                    Sections ({selectedSections.length})
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {selectedSections.map((sectionId) => {
-                      const section = sections.find((s) => s.id === sectionId);
-                      return (
-                        <Badge key={sectionId} variant="primary" size="sm">
-                          {section?.icon} {section?.name.split(' ')[0]}
-                        </Badge>
-                      );
-                    })}
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Configuration</p>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span>Période:</span>
+                      <span className="font-medium">{periodDays} jours</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Modèle IA:</span>
+                      <span className="font-medium">{aiModel}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Web Analysis:</span>
+                      <span className="font-medium">{includeWebAnalysis ? '✅ Oui' : '❌ Non'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Format:</span>
+                      <span className="font-medium uppercase">{format}</span>
+                    </div>
                   </div>
-                </div>
-
-                <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Format</p>
-                  <p className="font-semibold text-gray-900 dark:text-white uppercase">
-                    {format} {format === 'pdf' ? 'Enrichi' : 'Interactif'}
-                  </p>
                 </div>
               </div>
 
@@ -571,49 +531,49 @@ export default function EnhancedReports() {
                   className="btn btn-secondary w-full flex items-center justify-center space-x-2"
                 >
                   <Eye className="w-4 h-4" />
-                  <span>Prévisualiser</span>
+                  <span>Prévisualiser IA</span>
                 </button>
 
                 <button
                   onClick={handleGenerateReport}
                   disabled={
                     selectedKeywords.length === 0 ||
-                    selectedSections.length === 0 ||
                     !reportObject.trim() ||
-                    isGenerating
+                    isGenerating ||
+                    !aiStatusData?.ai_service_available
                   }
                   className="btn btn-primary w-full flex items-center justify-center space-x-2"
                 >
                   {isGenerating ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Génération...</span>
+                      <span>IA en cours...</span>
                     </>
                   ) : (
                     <>
-                      <Download className="w-4 h-4" />
-                      <span>Générer Rapport Enrichi</span>
+                      <Brain className="w-4 h-4" />
+                      <span>Générer avec IA</span>
                     </>
                   )}
                 </button>
               </div>
             </Card>
 
-            {/* Aide enrichie */}
-            <Card className="bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-800">
+            {/* Aide IA */}
+            <Card className="bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-900/20 dark:to-blue-900/20 border-2 border-purple-200 dark:border-purple-800">
               <div className="flex items-start space-x-3">
-                <div className="text-2xl">🎯</div>
+                <div className="text-2xl">🧠</div>
                 <div>
-                  <h4 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">
-                    Fonctionnalités enrichies
+                  <h4 className="font-semibold text-purple-900 dark:text-purple-200 mb-2">
+                    Intelligence Artificielle Souveraine
                   </h4>
-                  <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
-                    <li><strong>🚨 Évaluation de gravité:</strong> Note de risque automatique</li>
-                    <li><strong>📈 Détection de pics:</strong> Analyse des variations inhabituelles</li>
-                    <li><strong>👑 Profils influenceurs:</strong> Métriques avancées et évolution</li>
-                    <li><strong>🌍 Géographie:</strong> Répartition mondiale des mentions</li>
-                    <li><strong>📊 Comparaisons:</strong> Évolution vs période précédente</li>
-                    <li><strong>🎯 Recommandations:</strong> Actions concrètes prioritaires</li>
+                  <ul className="text-sm text-purple-800 dark:text-purple-300 space-y-1">
+                    <li><strong>🔍 Analyse web:</strong> Lecture automatique des sources</li>
+                    <li><strong>💭 Sentiment IA:</strong> Nuances émotionnelles avancées</li>
+                    <li><strong>📈 Tendances:</strong> Détection de signaux faibles</li>
+                    <li><strong>👑 Influenceurs:</strong> Évaluation de risque intelligente</li>
+                    <li><strong>🎯 Recommandations:</strong> Actions basées sur l'IA</li>
+                    <li><strong>🔒 Authenticité:</strong> Détection de contenu suspect</li>
                   </ul>
                 </div>
               </div>
@@ -622,105 +582,40 @@ export default function EnhancedReports() {
         </div>
       )}
 
-      {/* Tab Templates */}
-      {activeTab === 'templates' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {templates.map((template) => (
-            <Card key={template.id} hoverable>
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                    {template.name}
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    {template.description}
-                  </p>
-                </div>
-                <button
-                  onClick={() => applyTemplate(template)}
-                  className="btn btn-primary"
-                >
-                  Appliquer
-                </button>
-              </div>
-              
-              <div className="space-y-3">
-                <div>
-                  <Badge variant="info" size="sm">{template.audience}</Badge>
-                  <Badge variant="primary" size="sm" >{template.duration}</Badge>
-                </div>
-                
-                <div>
-                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Sections incluses:
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {template.sections.map((sectionId) => {
-                      const section = sections.find(s => s.id === sectionId);
-                      return (
-                        <Badge key={sectionId} variant="primary" size="sm">
-                          {section?.icon} {section?.name.split(' ')[0]}
-                        </Badge>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      {/* Tab Méthodologie */}
-      {activeTab === 'methodology' && methodologyData && (
+      {/* Tab Statut IA */}
+      {activeTab === 'ai-status' && aiStatusData && (
         <div className="space-y-6">
           <Card>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              {methodologyData.methodology.title}
-            </h2>
-            <p className="text-gray-700 dark:text-gray-300 mb-6">
-              {methodologyData.methodology.description}
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-              {methodologyData.methodology.factors.map((factor: any, index: number) => (
-                <div key={index} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                    {factor.name} ({factor.weight})
-                  </h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                    {factor.description}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-500">
-                    {factor.calculation}
-                  </p>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                Statut du Service IA
+              </h2>
+              <Badge variant={aiStatusData.ai_service_available ? 'success' : 'danger'}>
+                {aiStatusData.ai_service_available ? '🟢 Actif' : '🔴 Inactif'}
+              </Badge>
             </div>
 
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-              Échelle de Risque
-            </h3>
-            <div className="space-y-3">
-              {methodologyData.methodology.scale.map((level: any, index: number) => (
-                <div key={index} className="flex items-center space-x-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div 
-                    className="w-4 h-4 rounded-full"
-                    style={{ backgroundColor: level.color }}
-                  />
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="font-semibold text-gray-900 dark:text-white">
-                        {level.level}
-                      </span>
-                      <span className="text-sm text-gray-600 dark:text-gray-400">
-                        ({level.range})
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {level.description}
-                    </p>
+            <p className="text-gray-700 dark:text-gray-300 mb-6">
+              {aiStatusData.recommendation}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {aiStatusData.models.map((model, index) => (
+                <div key={index} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-gray-900 dark:text-white">
+                      {model.name}
+                    </h4>
+                    <Badge variant={model.available ? 'success' : 'danger'} size="sm">
+                      {model.available ? '✅' : '❌'}
+                    </Badge>
                   </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    {model.description}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-500">
+                    Performance: {model.performance}
+                  </p>
                 </div>
               ))}
             </div>
@@ -728,59 +623,126 @@ export default function EnhancedReports() {
         </div>
       )}
 
-      {/* Modal Templates */}
-      {showTemplateModal && (
-        <Modal
-          isOpen={showTemplateModal}
-          onClose={() => setShowTemplateModal(false)}
-          title="Choisir un template de rapport"
-          size="lg"
-        >
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {templates.map((template) => (
-              <button
-                key={template.id}
-                onClick={() => applyTemplate(template)}
-                className="p-4 border-2 border-gray-200 dark:border-gray-700 rounded-lg hover:border-primary-500 transition-colors text-left"
-              >
-                <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                  {template.name}
-                </h4>
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                  {template.description}
-                </p>
-                <div className="flex flex-wrap gap-1">
-                  {template.sections.map((sectionId) => {
-                    const section = sections.find(s => s.id === sectionId);
-                    return (
-                      <Badge key={sectionId} variant="primary" size="sm">
-                        {section?.icon}
+      {/* Tab Capacités */}
+      {activeTab === 'capabilities' && capabilitiesData && (
+        <div className="space-y-6">
+          <Card>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+              Capacités d'Analyse IA
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+              {capabilitiesData.analysis_types?.map((capability: AICapability, index: number) => (
+                <div key={index} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
+                    {capability.name}
+                  </h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    {capability.description}
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {capability.features.map((feature, fIndex) => (
+                      <Badge key={fIndex} variant="primary" size="sm">
+                        {feature}
                       </Badge>
-                    );
-                  })}
+                    ))}
+                  </div>
                 </div>
-              </button>
-            ))}
-          </div>
-        </Modal>
+              ))}
+            </div>
+
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">
+                🌐 Analyse Web Avancée
+              </h3>
+              <p className="text-sm text-blue-800 dark:text-blue-300 mb-3">
+                {capabilitiesData.web_analysis?.description}
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-medium text-blue-900 dark:text-blue-200 mb-2">Fonctionnalités:</h4>
+                  <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
+                    {capabilitiesData.web_analysis?.features?.map((feature: string, index: number) => (
+                      <li key={index}>• {feature}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <h4 className="font-medium text-blue-900 dark:text-blue-200 mb-2">Limitations:</h4>
+                  <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
+                    {capabilitiesData.web_analysis?.limitations?.map((limitation: string, index: number) => (
+                      <li key={index}>• {limitation}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
       )}
 
-      {/* Modal de prévisualisation enrichie */}
+      {/* Tab Exemples */}
+      {activeTab === 'examples' && examplesData && (
+        <div className="space-y-6">
+          <Card>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+              Exemples d'Analyses IA
+            </h2>
+
+            <div className="space-y-6">
+              {Object.entries(examplesData.sample_analyses || {}).map(([type, example]: [string, any]) => (
+                <div key={type} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                  <h4 className="font-semibold text-gray-900 dark:text-white mb-2 capitalize">
+                    {type.replace('_', ' ')}
+                  </h4>
+                  <div className="space-y-2">
+                    <div>
+                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Input:</span>
+                      <p className="text-sm text-gray-700 dark:text-gray-300 italic">
+                        "{example.input}"
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Analyse IA:</span>
+                      <p className="text-sm text-gray-900 dark:text-white">
+                        {example.output}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mt-6">
+              <h3 className="font-semibold text-green-900 dark:text-green-200 mb-2">
+                💡 Insights IA Avancés
+              </h3>
+              <ul className="text-sm text-green-800 dark:text-green-300 space-y-1">
+                {examplesData.ai_insights_examples?.map((insight: string, index: number) => (
+                  <li key={index}>• {insight}</li>
+                ))}
+              </ul>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* Modal de prévisualisation intelligent */}
       {showPreviewModal && previewData && (
         <Modal
           isOpen={showPreviewModal}
           onClose={() => setShowPreviewModal(false)}
-          title="Prévisualisation du rapport enrichi"
+          title="🤖 Prévisualisation Rapport Intelligent"
           size="lg"
         >
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Mots-clés</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Mots-clés IA</p>
                 <div className="flex flex-wrap gap-1">
                   {previewData.keywords.map((kw) => (
                     <Badge key={kw} variant="primary" size="sm">
-                      {kw}
+                      🤖 {kw}
                     </Badge>
                   ))}
                 </div>
@@ -788,65 +750,56 @@ export default function EnhancedReports() {
 
               <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Total mentions
+                  Données à analyser
                 </p>
                 <p className="text-xl font-bold text-gray-900 dark:text-white">
-                  {previewData.total_mentions}
+                  {previewData.total_mentions} mentions
+                </p>
+                <p className="text-xs text-gray-500">
+                  + {previewData.estimated_web_sources} sources web
                 </p>
               </div>
             </div>
 
-            {previewData.risk_level && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">
+                  Modèles IA disponibles
+                </p>
+                <div className="space-y-1">
+                  {previewData.ai_models_available.map((model, index) => (
+                    <div key={index} className="text-sm text-blue-800 dark:text-blue-300">
+                      ✓ {model}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+                <p className="text-sm text-purple-600 dark:text-purple-400 mb-1">
+                  Temps de traitement estimé
+                </p>
+                <p className="text-lg font-bold text-purple-900 dark:text-purple-200">
+                  ⏱️ {previewData.processing_time_estimate}
+                </p>
+              </div>
+            </div>
+
+            {previewData.risk_level_preview && (
               <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Niveau de risque estimé
+                  Niveau de risque préliminaire (IA)
                 </p>
-                <p className={`text-lg font-bold ${getRiskColor(previewData.risk_level)}`}>
+                <p className={`text-lg font-bold ${getRiskColor(previewData.risk_level_preview)}`}>
                   <Shield className="w-5 h-5 inline mr-2" />
-                  {previewData.risk_level}
+                  {previewData.risk_level_preview}
                 </p>
               </div>
             )}
 
-            <div>
-              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Sections disponibles
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                {[
-                  { key: 'has_analysis', label: 'Analyse Détaillée', icon: '📊' },
-                  { key: 'has_risk_assessment', label: 'Évaluation Risque', icon: '🚨' },
-                  { key: 'has_trends', label: 'Analyse Tendances', icon: '📈' },
-                  { key: 'has_influencers', label: 'Profils Influenceurs', icon: '👑' },
-                  { key: 'has_geography', label: 'Répartition Géo', icon: '🌍' },
-                ].map((item) => (
-                  <div
-                    key={item.key}
-                    className={`p-3 rounded-lg ${
-                      previewData[item.key as keyof EnhancedReportPreview]
-                        ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
-                        : 'bg-gray-50 dark:bg-gray-700'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <span className="text-lg">{item.icon}</span>
-                      <span className="text-sm font-medium text-gray-900 dark:text-white">
-                        {item.label}
-                      </span>
-                      {previewData[item.key as keyof EnhancedReportPreview] ? (
-                        <Check className="w-4 h-4 text-green-500 ml-auto" />
-                      ) : (
-                        <X className="w-4 h-4 text-gray-400 ml-auto" />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {previewData.total_mentions === 0 && (
               <Alert type="warning">
-                Aucune mention trouvée pour cette période. Le rapport sera vide.
+                Aucune mention trouvée pour cette période. Le rapport IA sera limité.
               </Alert>
             )}
           </div>

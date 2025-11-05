@@ -1,17 +1,34 @@
 """
 Service IA pour les agents de génération de rapports intelligents
 Utilise des modèles LLM open source (Ollama + HuggingFace Transformers en fallback)
+Avec capacités de lecture web et d'analyse contextuelle avancée
 """
 
 import logging
 import json
 import asyncio
+import aiohttp
+import ssl
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import re
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
+import time
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+@dataclass
+class WebContent:
+    """Contenu web extrait pour analyse"""
+    url: str
+    title: str
+    content: str
+    comments: List[Dict]
+    metadata: Dict
+    extracted_at: datetime
 
 @dataclass
 class AnalysisContext:
@@ -26,6 +43,198 @@ class AnalysisContext:
     geographic_data: List[Dict]
     influencers_data: List[Dict]
     time_trends: List[Dict]
+    web_content: List[WebContent]  # Nouveau: contenu web analysé
+
+
+class WebScrapingService:
+    """Service de lecture web pour analyser le contenu des sources"""
+    
+    def __init__(self):
+        self.session = None
+        self.headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'fr-FR,fr;q=0.9,en;q=0.8',
+            'Accept-Encoding': 'gzip, deflate',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+    
+    async def __aenter__(self):
+        connector = aiohttp.TCPConnector(
+            ssl=ssl.create_default_context(),
+            limit=10,
+            limit_per_host=5
+        )
+        timeout = aiohttp.ClientTimeout(total=30, connect=10)
+        self.session = aiohttp.ClientSession(
+            connector=connector,
+            timeout=timeout,
+            headers=self.headers
+        )
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self.session:
+            await self.session.close()
+    
+    async def extract_content(self, url: str) -> Optional[WebContent]:
+        """Extraire le contenu d'une page web"""
+        try:
+            if not self.session:
+                logger.error("Session not initialized")
+                return None
+            
+            async with self.session.get(url) as response:
+                if response.status != 200:
+                    logger.warning(f"Failed to fetch {url}: {response.status}")
+                    return None
+                
+                html = await response.text()
+                soup = BeautifulSoup(html, 'html.parser')
+                
+                # Nettoyer le HTML
+                for script in soup(["script", "style", "nav", "header", "footer"]):
+                    script.decompose()
+                
+                # Extraire le titre
+                title = ""
+                if soup.title:
+                    title = soup.title.string.strip()
+                elif soup.find('h1'):
+                    title = soup.find('h1').get_text().strip()
+                
+                # Extraire le contenu principal
+                content = ""
+                
+                # Essayer de trouver le contenu principal
+                main_content = soup.find('main') or soup.find('article') or soup.find('div', class_=re.compile(r'content|article|post'))
+                
+                if main_content:
+                    # Extraire les paragraphes
+                    paragraphs = main_content.find_all(['p', 'div'], string=True)
+                    content = ' '.join([p.get_text().strip() for p in paragraphs if p.get_text().strip()])
+                else:
+                    # Fallback: extraire tous les paragraphes
+                    paragraphs = soup.find_all('p')
+                    content = ' '.join([p.get_text().strip() for p in paragraphs if p.get_text().strip()])
+                
+                # Extraire les commentaires
+                comments = await self._extract_comments(soup, url)
+                
+                # Métadonnées
+                metadata = {
+                    'domain': urlparse(url).netloc,
+                    'language': soup.get('lang', 'unknown'),
+                    'description': self._get_meta_description(soup),
+                    'published_date': self._extract_published_date(soup),
+                    'author': self._extract_author(soup),
+                    'word_count': len(content.split()),
+                    'comment_count': len(comments)
+                }
+                
+                return WebContent(
+                    url=url,
+                    title=title,
+                    content=content[:5000],  # Limiter la taille
+                    comments=comments,
+                    metadata=metadata,
+                    extracted_at=datetime.utcnow()
+                )
+                
+        except Exception as e:
+            logger.error(f"Error extracting content from {url}: {e}")
+            return None
+    
+    async def _extract_comments(self, soup: BeautifulSoup, url: str) -> List[Dict]:
+        """Extraire les commentaires de la page"""
+        comments = []
+        
+        # Patterns pour différents systèmes de commentaires
+        comment_selectors = [
+            {'selector': '.comment', 'author': '.comment-author', 'text': '.comment-text'},
+            {'selector': '[class*="comment"]', 'author': '[class*="author"]', 'text': '[class*="text"]'},
+            {'selector': '.reply', 'author': '.user', 'text': '.message'},
+        ]
+        
+        for pattern in comment_selectors:
+            comment_elements = soup.select(pattern['selector'])
+            
+            for elem in comment_elements[:20]:  # Limiter à 20 commentaires
+                try:
+                    author_elem = elem.select_one(pattern['author'])
+                    text_elem = elem.select_one(pattern['text'])
+                    
+                    if text_elem:
+                        comment_text = text_elem.get_text().strip()
+                        if len(comment_text) > 10:  # Éviter les commentaires trop courts
+                            comments.append({
+                                'author': author_elem.get_text().strip() if author_elem else 'Anonyme',
+                                'text': comment_text[:500],  # Limiter la taille
+                                'timestamp': self._extract_comment_date(elem),
+                                'likes': self._extract_comment_likes(elem)
+                            })
+                except Exception as e:
+                    logger.debug(f"Error extracting comment: {e}")
+                    continue
+        
+        return comments
+    
+    def _get_meta_description(self, soup: BeautifulSoup) -> str:
+        """Extraire la description meta"""
+        meta_desc = soup.find('meta', attrs={'name': 'description'})
+        if meta_desc:
+            return meta_desc.get('content', '')
+        return ''
+    
+    def _extract_published_date(self, soup: BeautifulSoup) -> Optional[str]:
+        """Extraire la date de publication"""
+        # Chercher dans les métadonnées
+        date_selectors = [
+            'meta[property="article:published_time"]',
+            'meta[name="publishdate"]',
+            'time[datetime]',
+            '.published-date',
+            '.date'
+        ]
+        
+        for selector in date_selectors:
+            elem = soup.select_one(selector)
+            if elem:
+                return elem.get('content') or elem.get('datetime') or elem.get_text()
+        return None
+    
+    def _extract_author(self, soup: BeautifulSoup) -> str:
+        """Extraire l'auteur"""
+        author_selectors = [
+            'meta[name="author"]',
+            '.author',
+            '.byline',
+            '[rel="author"]'
+        ]
+        
+        for selector in author_selectors:
+            elem = soup.select_one(selector)
+            if elem:
+                return elem.get('content') or elem.get_text().strip()
+        return 'Inconnu'
+    
+    def _extract_comment_date(self, comment_elem) -> Optional[str]:
+        """Extraire la date d'un commentaire"""
+        date_elem = comment_elem.select_one('time, .date, [class*="date"]')
+        if date_elem:
+            return date_elem.get('datetime') or date_elem.get_text().strip()
+        return None
+    
+    def _extract_comment_likes(self, comment_elem) -> int:
+        """Extraire le nombre de likes d'un commentaire"""
+        like_elem = comment_elem.select_one('.likes, .upvote, [class*="like"], [class*="vote"]')
+        if like_elem:
+            text = like_elem.get_text().strip()
+            numbers = re.findall(r'\d+', text)
+            if numbers:
+                return int(numbers[0])
+        return 0
 
 
 class LLMService:
@@ -165,6 +374,220 @@ class BaseAgent:
         raise NotImplementedError
 
 
+class WebContentAnalysisAgent(BaseAgent):
+    """Agent spécialisé dans l'analyse du contenu web"""
+    
+    def __init__(self, llm_service: LLMService):
+        super().__init__(llm_service, "web_content_analyst")
+    
+    async def analyze(self, context: AnalysisContext) -> Dict[str, Any]:
+        """Analyse le contenu web extrait pour identifier les tendances et opinions"""
+        
+        web_contents = context.web_content
+        if not web_contents:
+            return {
+                'type': 'web_content_analysis',
+                'analysis': 'Aucun contenu web disponible pour l\'analyse.',
+                'article_insights': [],
+                'comment_insights': [],
+                'engagement_patterns': {}
+            }
+        
+        # Analyser les articles principaux
+        articles_summary = self._analyze_articles(web_contents)
+        
+        # Analyser les commentaires
+        comments_analysis = self._analyze_comments(web_contents)
+        
+        # Créer le prompt pour l'IA
+        prompt = f"""Tu es un expert analyste en contenu web et opinion publique. Analyse ce contenu extrait du web.
+
+ARTICLES ANALYSÉS ({len(web_contents)} sources):
+{articles_summary}
+
+COMMENTAIRES ANALYSÉS ({sum(len(wc.comments) for wc in web_contents)} commentaires):
+{comments_analysis}
+
+CONTEXTE:
+- Mots-clés surveillés: {', '.join(context.keywords)}
+- Période: {context.period_days} jours
+
+INSTRUCTIONS:
+1. Identifie les narratifs dominants dans les articles
+2. Analyse la réaction du public dans les commentaires
+3. Détecte les comptes les plus engagés (positivement/négativement)
+4. Évalue l'authenticité des interactions
+5. Identifie les signaux d'alarme ou d'opportunité
+6. Compare le ton des articles vs les réactions du public
+
+Rédige une analyse en français, structurée et actionnable en 300-400 mots."""
+
+        analysis_text = await self.llm_service.generate_text(prompt, max_tokens=600)
+        cleaned_text = self._clean_analysis_text(analysis_text)
+        
+        return {
+            'type': 'web_content_analysis',
+            'analysis': cleaned_text,
+            'article_insights': self._extract_article_insights(web_contents),
+            'comment_insights': self._extract_comment_insights(web_contents),
+            'engagement_patterns': self._analyze_engagement_patterns(web_contents),
+            'authenticity_score': self._calculate_authenticity_score(web_contents)
+        }
+    
+    def _analyze_articles(self, web_contents: List[WebContent]) -> str:
+        """Analyse les articles principaux"""
+        summaries = []
+        for content in web_contents[:5]:  # Limiter à 5 articles
+            word_count = len(content.content.split())
+            summaries.append(
+                f"- {content.metadata.get('domain', 'Unknown')}: '{content.title}' "
+                f"({word_count} mots, {len(content.comments)} commentaires)"
+            )
+        return '\n'.join(summaries)
+    
+    def _analyze_comments(self, web_contents: List[WebContent]) -> str:
+        """Analyse les commentaires"""
+        all_comments = []
+        for content in web_contents:
+            all_comments.extend(content.comments)
+        
+        if not all_comments:
+            return "Aucun commentaire trouvé"
+        
+        # Analyser la distribution des longueurs
+        lengths = [len(c['text'].split()) for c in all_comments]
+        avg_length = sum(lengths) / len(lengths) if lengths else 0
+        
+        # Analyser l'engagement
+        total_likes = sum(c.get('likes', 0) for c in all_comments)
+        
+        return f"Moyenne {avg_length:.1f} mots/commentaire, {total_likes} likes totaux, {len(set(c['author'] for c in all_comments))} auteurs uniques"
+    
+    def _extract_article_insights(self, web_contents: List[WebContent]) -> List[Dict]:
+        """Extraire les insights des articles"""
+        insights = []
+        for content in web_contents:
+            insights.append({
+                'url': content.url,
+                'title': content.title,
+                'domain': content.metadata.get('domain', ''),
+                'word_count': content.metadata.get('word_count', 0),
+                'comment_count': len(content.comments),
+                'author': content.metadata.get('author', 'Inconnu'),
+                'published_date': content.metadata.get('published_date'),
+                'key_points': self._extract_key_points(content.content)
+            })
+        return insights
+    
+    def _extract_comment_insights(self, web_contents: List[WebContent]) -> Dict[str, Any]:
+        """Extraire les insights des commentaires"""
+        all_comments = []
+        for content in web_contents:
+            for comment in content.comments:
+                comment['source_url'] = content.url
+                all_comments.append(comment)
+        
+        # Analyser l'engagement
+        top_engaged = sorted(all_comments, key=lambda x: x.get('likes', 0), reverse=True)[:10]
+        
+        # Analyser les auteurs les plus actifs
+        author_counts = {}
+        for comment in all_comments:
+            author = comment['author']
+            if author not in author_counts:
+                author_counts[author] = {'count': 0, 'total_likes': 0, 'comments': []}
+            author_counts[author]['count'] += 1
+            author_counts[author]['total_likes'] += comment.get('likes', 0)
+            author_counts[author]['comments'].append(comment)
+        
+        most_active = sorted(author_counts.items(), key=lambda x: x[1]['count'], reverse=True)[:5]
+        
+        return {
+            'total_comments': len(all_comments),
+            'unique_authors': len(author_counts),
+            'top_engaged_comments': [
+                {
+                    'author': c['author'],
+                    'text': c['text'][:100] + '...',
+                    'likes': c.get('likes', 0),
+                    'source_url': c['source_url']
+                }
+                for c in top_engaged[:5]
+            ],
+            'most_active_authors': [
+                {
+                    'author': author,
+                    'comment_count': data['count'],
+                    'total_likes': data['total_likes'],
+                    'avg_likes': data['total_likes'] / data['count'] if data['count'] > 0 else 0
+                }
+                for author, data in most_active
+            ]
+        }
+    
+    def _analyze_engagement_patterns(self, web_contents: List[WebContent]) -> Dict[str, Any]:
+        """Analyser les patterns d'engagement"""
+        all_comments = []
+        for content in web_contents:
+            all_comments.extend(content.comments)
+        
+        if not all_comments:
+            return {}
+        
+        # Analyser la distribution des likes
+        likes = [c.get('likes', 0) for c in all_comments]
+        
+        return {
+            'total_comments': len(all_comments),
+            'avg_likes_per_comment': sum(likes) / len(likes) if likes else 0,
+            'max_likes': max(likes) if likes else 0,
+            'comments_with_likes': len([l for l in likes if l > 0]),
+            'engagement_rate': len([l for l in likes if l > 0]) / len(likes) if likes else 0
+        }
+    
+    def _calculate_authenticity_score(self, web_contents: List[WebContent]) -> float:
+        """Calculer un score d'authenticité des interactions"""
+        all_comments = []
+        for content in web_contents:
+            all_comments.extend(content.comments)
+        
+        if not all_comments:
+            return 0.0
+        
+        score = 1.0
+        
+        # Pénaliser les commentaires trop courts
+        short_comments = len([c for c in all_comments if len(c['text'].split()) < 3])
+        if short_comments / len(all_comments) > 0.5:
+            score -= 0.2
+        
+        # Pénaliser les auteurs répétitifs
+        authors = [c['author'] for c in all_comments]
+        unique_authors = len(set(authors))
+        if unique_authors / len(authors) < 0.7:
+            score -= 0.3
+        
+        # Bonus pour la variété des longueurs de commentaires
+        lengths = [len(c['text'].split()) for c in all_comments]
+        if len(set(lengths)) > len(lengths) * 0.5:
+            score += 0.1
+        
+        return max(0.0, min(1.0, score))
+    
+    def _extract_key_points(self, content: str) -> List[str]:
+        """Extraire les points clés d'un contenu"""
+        # Simple extraction basée sur les phrases
+        sentences = content.split('.')
+        # Retourner les 3 premières phrases non vides
+        key_points = []
+        for sentence in sentences:
+            if len(sentence.strip()) > 20:
+                key_points.append(sentence.strip())
+                if len(key_points) >= 3:
+                    break
+        return key_points
+
+
 class SentimentAnalysisAgent(BaseAgent):
     """Agent spécialisé dans l'analyse de sentiment avancée"""
     
@@ -181,6 +604,11 @@ class SentimentAnalysisAgent(BaseAgent):
         # Extraire quelques mentions représentatives
         sample_positive = [m for m in context.mentions if m.get('sentiment') == 'positive'][:3]
         sample_negative = [m for m in context.mentions if m.get('sentiment') == 'negative'][:3]
+        
+        # Analyser aussi le contenu web si disponible
+        web_sentiment = ""
+        if context.web_content:
+            web_sentiment = self._analyze_web_sentiment(context.web_content)
         
         prompt = f"""Tu es un expert analyste en communication et opinion publique. Analyse cette distribution de sentiment et rédige une analyse approfondie.
 
@@ -200,12 +628,15 @@ EXEMPLES MENTIONS POSITIVES:
 EXEMPLES MENTIONS NÉGATIVES:
 {chr(10).join([f"- {m.get('title', '')} (source: {m.get('source', '')})" for m in sample_negative])}
 
+{web_sentiment}
+
 INSTRUCTIONS:
 1. Analyse la polarisation de l'opinion (forte/modérée/équilibrée)
 2. Identifie les signaux d'alarme ou d'opportunité
 3. Détecte les nuances dans les sentiments (pas seulement pos/neg/neutre)
-4. Propose des insights stratégiques basés sur cette distribution
-5. Évite les phrases génériques, sois spécifique aux données
+4. Compare sentiment des mentions vs réactions du public
+5. Propose des insights stratégiques basés sur cette distribution
+6. Évite les phrases génériques, sois spécifique aux données
 
 Rédige une analyse en français, structurée et actionnable en 200-300 mots."""
 
@@ -217,7 +648,73 @@ Rédige une analyse en français, structurée et actionnable en 200-300 mots."""
             'analysis': cleaned_text,
             'key_insights': self._extract_key_insights(sentiment_data, total_mentions),
             'sentiment_score': self._calculate_sentiment_score(sentiment_data),
-            'polarization_level': self._assess_polarization(sentiment_data)
+            'polarization_level': self._assess_polarization(sentiment_data),
+            'web_vs_mentions': self._compare_web_mentions_sentiment(context) if context.web_content else None
+        }
+    
+    def _analyze_web_sentiment(self, web_contents: List[WebContent]) -> str:
+        """Analyser le sentiment du contenu web"""
+        if not web_contents:
+            return ""
+        
+        total_comments = sum(len(wc.comments) for wc in web_contents)
+        
+        return f"""
+ANALYSE CONTENU WEB:
+- {len(web_contents)} articles analysés
+- {total_comments} commentaires extraits
+- Sentiment apparent dans les commentaires: {self._estimate_comment_sentiment(web_contents)}
+"""
+    
+    def _estimate_comment_sentiment(self, web_contents: List[WebContent]) -> str:
+        """Estimer le sentiment des commentaires"""
+        all_comments = []
+        for content in web_contents:
+            all_comments.extend(content.comments)
+        
+        if not all_comments:
+            return "Indéterminé"
+        
+        # Simple heuristique basée sur la longueur et l'engagement
+        positive_indicators = 0
+        negative_indicators = 0
+        
+        for comment in all_comments:
+            text = comment['text'].lower()
+            likes = comment.get('likes', 0)
+            
+            # Mots positifs simples
+            if any(word in text for word in ['bravo', 'excellent', 'super', 'merci', 'formidable']):
+                positive_indicators += 1 + (likes * 0.1)
+            
+            # Mots négatifs simples
+            if any(word in text for word in ['nul', 'horrible', 'déçu', 'scandale', 'inadmissible']):
+                negative_indicators += 1 + (likes * 0.1)
+        
+        if positive_indicators > negative_indicators * 1.5:
+            return "Plutôt positif"
+        elif negative_indicators > positive_indicators * 1.5:
+            return "Plutôt négatif"
+        else:
+            return "Mitigé"
+    
+    def _compare_web_mentions_sentiment(self, context: AnalysisContext) -> Dict[str, Any]:
+        """Comparer le sentiment des mentions vs contenu web"""
+        if not context.web_content:
+            return {}
+        
+        # Sentiment des mentions
+        mentions_sentiment = context.sentiment_distribution
+        mentions_total = sum(mentions_sentiment.values())
+        
+        # Estimation du sentiment web
+        web_sentiment = self._estimate_comment_sentiment(context.web_content)
+        
+        return {
+            'mentions_positive_pct': mentions_sentiment.get('positive', 0) / mentions_total * 100 if mentions_total > 0 else 0,
+            'mentions_negative_pct': mentions_sentiment.get('negative', 0) / mentions_total * 100 if mentions_total > 0 else 0,
+            'web_sentiment_estimate': web_sentiment,
+            'alignment': 'Aligned' if web_sentiment == 'Mitigé' else 'Divergent'
         }
     
     def _extract_key_insights(self, sentiment_data: Dict, total: int) -> List[str]:
@@ -420,6 +917,9 @@ class InfluencerAnalysisAgent(BaseAgent):
         top_influencers = influencers[:5]
         risk_analysis = self._assess_influencer_risks(influencers)
         
+        # Analyser aussi les commentateurs actifs du web
+        web_commentators = self._analyze_web_commentators(context.web_content) if context.web_content else {}
+        
         prompt = f"""Tu es un expert en analyse d'influence et de réputation numérique. Analyse ces profils d'influenceurs et leur impact potentiel.
 
 TOP INFLUENCEURS IDENTIFIÉS:
@@ -431,6 +931,8 @@ ANALYSE DE RISQUE:
 - Sentiment majoritaire: {risk_analysis['majority_sentiment']}
 - Portée estimée totale: {risk_analysis['estimated_reach']}
 
+{f"COMMENTATEURS WEB ACTIFS: {len(web_commentators.get('active_commentators', []))} identifiés" if web_commentators else ""}
+
 CONTEXTE:
 - Mots-clés surveillés: {', '.join(context.keywords)}
 - Période: {context.period_days} jours
@@ -441,8 +943,9 @@ INSTRUCTIONS:
 2. Évalue le potentiel de viralisation et l'effet de réseau
 3. Détermine les profils à surveiller en priorité
 4. Analyse la cohérence des messages entre influenceurs
-5. Propose des stratégies d'engagement spécifiques
-6. Évalue les risques de réputation et les opportunités
+5. Compare influence "officielle" vs réactions du public
+6. Propose des stratégies d'engagement spécifiques
+7. Évalue les risques de réputation et les opportunités
 
 Rédige une analyse stratégique en français en 300-400 mots."""
 
@@ -454,7 +957,64 @@ Rédige une analyse stratégique en français en 300-400 mots."""
             'analysis': cleaned_text,
             'risk_assessment': risk_analysis,
             'key_influencers': self._format_key_influencers(top_influencers),
+            'web_commentators': web_commentators,
             'recommended_actions': self._generate_action_recommendations(risk_analysis)
+        }
+    
+    def _analyze_web_commentators(self, web_contents: List[WebContent]) -> Dict[str, Any]:
+        """Analyser les commentateurs actifs sur le web"""
+        if not web_contents:
+            return {}
+        
+        all_comments = []
+        for content in web_contents:
+            for comment in content.comments:
+                comment['source_url'] = content.url
+                all_comments.append(comment)
+        
+        # Analyser l'activité des commentateurs
+        author_activity = {}
+        for comment in all_comments:
+            author = comment['author']
+            if author not in author_activity:
+                author_activity[author] = {
+                    'comment_count': 0,
+                    'total_likes': 0,
+                    'avg_length': 0,
+                    'comments': []
+                }
+            
+            author_activity[author]['comment_count'] += 1
+            author_activity[author]['total_likes'] += comment.get('likes', 0)
+            author_activity[author]['comments'].append(comment)
+        
+        # Calculer les moyennes
+        for author, data in author_activity.items():
+            lengths = [len(c['text'].split()) for c in data['comments']]
+            data['avg_length'] = sum(lengths) / len(lengths) if lengths else 0
+            data['avg_likes'] = data['total_likes'] / data['comment_count'] if data['comment_count'] > 0 else 0
+        
+        # Identifier les plus actifs
+        active_commentators = sorted(
+            author_activity.items(),
+            key=lambda x: x[1]['comment_count'] * x[1]['avg_likes'],
+            reverse=True
+        )[:10]
+        
+        return {
+            'total_commentators': len(author_activity),
+            'total_comments': len(all_comments),
+            'active_commentators': [
+                {
+                    'author': author,
+                    'comment_count': data['comment_count'],
+                    'total_likes': data['total_likes'],
+                    'avg_likes': round(data['avg_likes'], 1),
+                    'avg_length': round(data['avg_length'], 1),
+                    'influence_score': data['comment_count'] * data['avg_likes']
+                }
+                for author, data in active_commentators
+            ]
         }
     
     def _assess_influencer_risks(self, influencers: List[Dict]) -> Dict[str, Any]:
@@ -534,13 +1094,15 @@ class ReportIntelligenceAgent:
     
     def __init__(self):
         self.llm_service = LLMService()
+        self.web_scraping = WebScrapingService()
         self.agents = {
             'sentiment': SentimentAnalysisAgent(self.llm_service),
             'trends': TrendAnalysisAgent(self.llm_service),
-            'influencers': InfluencerAnalysisAgent(self.llm_service)
+            'influencers': InfluencerAnalysisAgent(self.llm_service),
+            'web_content': WebContentAnalysisAgent(self.llm_service)
         }
     
-    async def generate_intelligent_analysis(self, context: AnalysisContext) -> Dict[str, Any]:
+    async def generate_intelligent_analysis(self, context: AnalysisContext, db: Session = None) -> Dict[str, Any]:
         """Génère une analyse complète avec tous les agents"""
         if not self.llm_service.is_available():
             logger.error("Aucun modèle LLM disponible")
@@ -548,6 +1110,10 @@ class ReportIntelligenceAgent:
                 'error': 'Service IA indisponible',
                 'fallback_analysis': self._generate_fallback_analysis(context)
             }
+        
+        # Enrichir le contexte avec le contenu web
+        if db:
+            context = await self._enrich_context_with_web_content(context, db)
         
         results = {}
         
@@ -577,6 +1143,55 @@ class ReportIntelligenceAgent:
         
         return results
     
+    async def _enrich_context_with_web_content(self, context: AnalysisContext, db: Session) -> AnalysisContext:
+        """Enrichir le contexte avec le contenu web extrait"""
+        web_contents = []
+        
+        try:
+            # Extraire les URLs uniques des mentions
+            urls = set()
+            for mention in context.mentions:
+                if mention.get('source_url') and mention['source_url'].startswith('http'):
+                    urls.add(mention['source_url'])
+            
+            # Limiter à 10 URLs pour éviter les timeouts
+            urls = list(urls)[:10]
+            
+            async with self.web_scraping as scraper:
+                # Traiter les URLs en parallèle avec limitation
+                semaphore = asyncio.Semaphore(3)  # Max 3 requêtes simultanées
+                
+                async def extract_with_semaphore(url):
+                    async with semaphore:
+                        return await scraper.extract_content(url)
+                
+                tasks = [extract_with_semaphore(url) for url in urls]
+                contents = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                for content in contents:
+                    if isinstance(content, WebContent):
+                        web_contents.append(content)
+                    elif isinstance(content, Exception):
+                        logger.debug(f"Erreur extraction contenu: {content}")
+        
+        except Exception as e:
+            logger.error(f"Erreur enrichissement contenu web: {e}")
+        
+        # Retourner le contexte enrichi
+        return AnalysisContext(
+            mentions=context.mentions,
+            keywords=context.keywords,
+            period_days=context.period_days,
+            total_mentions=context.total_mentions,
+            sentiment_distribution=context.sentiment_distribution,
+            top_sources=context.top_sources,
+            engagement_stats=context.engagement_stats,
+            geographic_data=context.geographic_data,
+            influencers_data=context.influencers_data,
+            time_trends=context.time_trends,
+            web_content=web_contents
+        )
+    
     async def _safe_analyze(self, agent, context, agent_name):
         """Analyse sécurisée avec gestion d'erreur"""
         try:
@@ -586,7 +1201,7 @@ class ReportIntelligenceAgent:
             return {'error': str(e), 'type': f'{agent_name}_analysis'}
     
     async def _generate_executive_summary(self, results: Dict, context: AnalysisContext) -> Dict[str, Any]:
-        """Génère une synthèse exécutive basée on toutes les analyses"""
+        """Génère une synthèse exécutive basée sur toutes les analyses"""
         
         # Extraire les insights clés
         key_insights = []
@@ -596,6 +1211,12 @@ class ReportIntelligenceAgent:
                 analysis = agent_result['analysis']
                 first_sentence = analysis.split('.')[0] + '.' if '.' in analysis else analysis[:100] + '...'
                 key_insights.append(first_sentence)
+        
+        # Ajouter des insights du contenu web si disponible
+        web_insights = ""
+        if context.web_content:
+            total_comments = sum(len(wc.comments) for wc in context.web_content)
+            web_insights = f"\nANALYSE WEB ENRICHIE: {len(context.web_content)} articles analysés avec {total_comments} commentaires extraits."
         
         prompt = f"""Tu es un directeur de l'analyse stratégique. Rédige une synthèse exécutive basée sur ces analyses d'experts.
 
@@ -607,12 +1228,15 @@ CONTEXTE GLOBAL:
 INSIGHTS DES EXPERTS:
 {chr(10).join([f"- {insight}" for insight in key_insights])}
 
+{web_insights}
+
 INSTRUCTIONS:
 1. Synthétise les points les plus critiques en 2-3 phrases
 2. Identifie le niveau de priorité global (CRITIQUE/MODÉRÉ/NORMAL)
-3. Propose 2-3 actions immédiates à entreprendre
-4. Évalue l'évolution probable à court terme
-5. Sois concis et actionnable - destiné à des décideurs
+3. Compare sentiment des mentions officielles vs réactions du public
+4. Propose 2-3 actions immédiates à entreprendre
+5. Évalue l'évolution probable à court terme
+6. Sois concis et actionnable - destiné à des décideurs
 
 Rédige une synthèse de 150-200 mots en français."""
 
@@ -627,6 +1251,7 @@ Rédige une synthèse de 150-200 mots en français."""
             'priority_level': priority_level,
             'key_metrics': {
                 'total_mentions': context.total_mentions,
+                'web_content_analyzed': len(context.web_content),
                 'analysis_confidence': self._calculate_confidence(results),
                 'alert_status': self._determine_alert_status(results)
             }
@@ -677,6 +1302,17 @@ Rédige une synthèse de 150-200 mots en français."""
             else:
                 scores.append(1)
         
+        # Analyse du contenu web
+        web_result = results.get('web_content', {})
+        if 'authenticity_score' in web_result:
+            authenticity = web_result['authenticity_score']
+            if authenticity < 0.5:
+                scores.append(3)  # Problème d'authenticité
+            elif authenticity < 0.7:
+                scores.append(2)
+            else:
+                scores.append(1)
+        
         # Déterminer le niveau global
         if not scores:
             return 'NORMAL'
@@ -699,6 +1335,10 @@ Rédige une synthèse de 150-200 mots en français."""
             else:
                 confidence_scores.append(0.3)  # Faible confiance si erreur
         
+        # Bonus si contenu web analysé
+        if any('web_content' in str(result) for result in results.values()):
+            confidence_scores.append(0.9)
+        
         return sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
     
     def _determine_alert_status(self, results: Dict) -> str:
@@ -710,6 +1350,8 @@ Rédige une synthèse de 150-200 mots en français."""
                 if 'alert_level' in result:
                     alerts.append(result['alert_level'])
                 elif 'risk_assessment' in result and result['risk_assessment'].get('high_risk'):
+                    alerts.append('élevé')
+                elif 'authenticity_score' in result and result['authenticity_score'] < 0.5:
                     alerts.append('élevé')
         
         if 'élevé' in alerts:

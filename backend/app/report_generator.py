@@ -1,8 +1,6 @@
 """
-Générateur de rapports enrichi spécialisé pour le contexte camerounais
-Version améliorée avec intelligence analytique avancée
-Structuré en 5 sections sur 2 pages avec contenu dense et stratégique
-AMÉLIORATIONS: Suppression recommandations + Sélection verbatims optimisée
+Générateur de rapports intelligents avec IA
+Utilise les agents IA pour analyser le contenu web et générer des insights avancés
 """
 
 import logging
@@ -11,56 +9,29 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, desc
 from collections import Counter
-import statistics
-import re
+import asyncio
+
+from enhanced_ai_service import ReportIntelligenceAgent, AnalysisContext, WebContent
+from app.models import Keyword, Mention
 
 logger = logging.getLogger(__name__)
 
 
-class CameroonReportGenerator:
-    """Générateur de rapports enrichi avec analyse stratégique avancée"""
-    
-    # Liste des influenceurs camerounais à surveiller (élargie et priorisée)
-    CAMEROON_INFLUENCERS = [
-        # Tier 1 - Activistes politiques majeurs
-        "Maurice Kamto", "Kah Walla", "Patrice Nganang", "Ernest Obama",
-        "Cabral Libii", "Joshua Osih", "Célestin Djamen", "Paul Éric Kingué",
-        
-        # Tier 2 - Journalistes et médias influents  
-        "Ahmed Abba", "Mimi Mefo", "Talk with Mimi Mefo", "Cameroon News Agency",
-        "Brice Nitcheu", "Michel Biem Tong", "Christian Penda Ekoka",
-        "Claude Wilfried Ekanga", "Armand Okol", "Fabrice Lena",
-        
-        # Tier 3 - Influenceurs numériques et culturels
-        "N'zui Manto", "Brigade anti-sardinards", "Boris Bertolt", "Angie Forbin",
-        "Abdoulaye Thiam", "MbangaMan237", "Sandy Boston Officiel 3", 
-        "Mbong Mendzui officiel", "Patrice Nouma", "Richard Bona", "Paul Chouta",
-        "Jaques Bertrand mang", "Michelle ngatchou", "AfroBrains Cameroon-ABC", 
-        "Infolage", "Mc-Kenzo-officiel", "Lepierro Lemonstre", "James Bardock Bardock", 
-        "Fernandtech TV", "Brenda Biya", "Calibri Calibro", "Wilfried Ekanga",
-        "Abdouraman Hamadou", "C'est le hoohaaa", "Général Valsero", "Valsero"
-    ]
-    
-    # Classification des influenceurs par tier (pour priorité verbatims)
-    INFLUENCER_TIERS = {
-        'tier_1': ["Maurice Kamto", "Kah Walla", "Patrice Nganang", "Ernest Obama",
-                   "Cabral Libii", "Joshua Osih", "Célestin Djamen", "Paul Éric Kingué"],
-        'tier_2': ["Ahmed Abba", "Mimi Mefo", "Talk with Mimi Mefo", "Cameroon News Agency",
-                   "Brice Nitcheu", "Michel Biem Tong", "Christian Penda Ekoka"],
-        'tier_3': ["N'zui Manto", "Brigade anti-sardinards", "Boris Bertolt", "Angie Forbin"]
-    }
+class IntelligentReportGenerator:
+    """Générateur de rapports intelligent avec IA et analyse web"""
     
     def __init__(self, db: Session):
         self.db = db
+        self.ai_agent = ReportIntelligenceAgent()
     
-    def generate_cameroon_report(
+    async def generate_intelligent_report(
         self,
         keyword_ids: List[int],
         days: int = 30,
-        report_object: str = ""
+        report_object: str = "",
+        include_web_analysis: bool = True
     ) -> Dict:
-        """Générer un rapport enrichi ultra-détaillé avec structure en 5 sections (sans recommandations)"""
-        from app.models import Keyword, Mention
+        """Générer un rapport enrichi avec analyse IA avancée"""
         
         keywords = self.db.query(Keyword).filter(Keyword.id.in_(keyword_ids)).all()
         if not keywords:
@@ -75,14 +46,16 @@ class CameroonReportGenerator:
             Mention.published_at >= since_date
         ).order_by(desc(Mention.published_at)).all()
         
-        # Filtrer influenceurs spécifiques
-        france24_mentions = [m for m in mentions if 'france' in m.source.lower() and '24' in m.source.lower()]
-        influencer_mentions = [
-            m for m in mentions 
-            if any(inf.lower() in m.author.lower() for inf in self.CAMEROON_INFLUENCERS)
-        ]
-        targeted_mentions = france24_mentions + influencer_mentions
+        # Préparer le contexte d'analyse pour l'IA
+        analysis_context = self._prepare_analysis_context(mentions, keywords_names, days)
         
+        # Générer l'analyse IA avec enrichissement web
+        ai_analysis = await self.ai_agent.generate_intelligent_analysis(
+            analysis_context, 
+            self.db if include_web_analysis else None
+        )
+        
+        # Préparer les données du rapport
         report_data = {
             'keywords': keywords_names,
             'keyword_ids': keyword_ids,
@@ -90,678 +63,449 @@ class CameroonReportGenerator:
             'report_object': report_object or ', '.join(keywords_names),
             'generated_at': datetime.utcnow(),
             'total_mentions': len(mentions),
+            'ai_analysis': ai_analysis,  # Analyse IA complète
+            'web_content_analyzed': len(analysis_context.web_content) if hasattr(analysis_context, 'web_content') else 0,
         }
         
-        # Analyses enrichies
+        # Analyses traditionnelles enrichies avec l'IA
         positive_mentions = [m for m in mentions if m.sentiment == 'positive']
         negative_mentions = [m for m in mentions if m.sentiment == 'negative']
         neutral_mentions = [m for m in mentions if m.sentiment == 'neutral']
         
-        report_data['risk_assessment'] = self._generate_enriched_risk_assessment(mentions, days)
-        report_data['positive_analysis'] = self._analyze_positive_sentiment_enriched(positive_mentions, mentions)
-        report_data['negative_analysis'] = self._analyze_negative_sentiment_enriched(negative_mentions, mentions)
-        report_data['neutral_analysis'] = self._analyze_neutral_sentiment_enriched(neutral_mentions, mentions)
-        report_data['judgment_synthesis'] = self._generate_enriched_synthesis(
-            positive_mentions, negative_mentions, neutral_mentions, mentions, days
-        )
-        report_data['engaged_influencers'] = self._analyze_engaged_influencers_enriched(targeted_mentions, mentions)
+        report_data['smart_analysis'] = self._generate_smart_analysis(mentions, days, ai_analysis)
+        report_data['engagement_insights'] = self._analyze_engagement_patterns(mentions, ai_analysis)
+        report_data['authenticity_assessment'] = self._assess_content_authenticity(ai_analysis)
+        report_data['actionable_recommendations'] = self._generate_actionable_recommendations(ai_analysis, mentions)
+        report_data['risk_assessment'] = self._generate_enhanced_risk_assessment(mentions, days, ai_analysis)
+        report_data['web_insights'] = self._extract_web_insights(ai_analysis)
         
         return report_data
     
-    def _get_prioritized_verbatims(self, mentions: List, sentiment_type: str, max_count: int = 3) -> List[Dict]:
-        """
-        Sélectionner les verbatims les plus pertinents en priorisant les activistes connus
+    def _prepare_analysis_context(self, mentions: List, keywords: List[str], days: int) -> AnalysisContext:
+        """Prépare le contexte pour l'analyse IA"""
         
-        Args:
-            mentions: Liste des mentions à analyser
-            sentiment_type: 'positive', 'negative', ou 'neutral'
-            max_count: Nombre maximum de verbatims à retourner
-            
-        Returns:
-            Liste des verbatims sélectionnés avec priorité aux activistes
-        """
-        if not mentions:
-            return []
-        
-        # Classifier les mentions par priorité
-        tier_1_mentions = []
-        tier_2_mentions = []
-        tier_3_mentions = []
-        other_mentions = []
-        
-        for mention in mentions:
-            author_lower = mention.author.lower()
-            
-            # Vérifier chaque tier
-            if any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_1']):
-                tier_1_mentions.append(mention)
-            elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_2']):
-                tier_2_mentions.append(mention)
-            elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_3']):
-                tier_3_mentions.append(mention)
-            else:
-                other_mentions.append(mention)
-        
-        # Trier chaque groupe par engagement décroissant
-        tier_1_mentions.sort(key=lambda m: m.engagement_score, reverse=True)
-        tier_2_mentions.sort(key=lambda m: m.engagement_score, reverse=True)
-        tier_3_mentions.sort(key=lambda m: m.engagement_score, reverse=True)
-        other_mentions.sort(key=lambda m: m.engagement_score, reverse=True)
-        
-        # Sélection intelligente avec priorité
-        selected_mentions = []
-        
-        # Prendre d'abord les tier 1 (au moins 1 si disponible)
-        if tier_1_mentions and len(selected_mentions) < max_count:
-            selected_mentions.extend(tier_1_mentions[:min(2, max_count)])
-        
-        # Compléter avec tier 2
-        if tier_2_mentions and len(selected_mentions) < max_count:
-            remaining = max_count - len(selected_mentions)
-            selected_mentions.extend(tier_2_mentions[:remaining])
-        
-        # Compléter avec tier 3 si nécessaire
-        if tier_3_mentions and len(selected_mentions) < max_count:
-            remaining = max_count - len(selected_mentions)
-            selected_mentions.extend(tier_3_mentions[:remaining])
-        
-        # En dernier recours, prendre les autres avec le plus d'engagement
-        if len(selected_mentions) < max_count and other_mentions:
-            remaining = max_count - len(selected_mentions)
-            selected_mentions.extend(other_mentions[:remaining])
-        
-        # Convertir en format verbatim
-        verbatims = []
-        for mention in selected_mentions:
-            # Déterminer le tier pour annotation
-            tier_info = ""
-            author_lower = mention.author.lower()
-            
-            if any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_1']):
-                tier_info = "🔴 ACTIVISTE MAJEUR"
-            elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_2']):
-                tier_info = "🟡 MÉDIA INFLUENT"
-            elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_3']):
-                tier_info = "🟠 INFLUENCEUR"
-            else:
-                tier_info = "⚫ CITOYEN"
-            
-            verbatims.append({
-                'text': self._clean_text(mention.content[:200]),
-                'author': mention.author,
-                'source': mention.source,
-                'date': mention.published_at.strftime('%d/%m/%Y') if mention.published_at else 'N/A',
-                'engagement': int(mention.engagement_score),
-                'tier_info': tier_info,
-                'priority_score': self._calculate_priority_score(mention)
+        # Convertir les mentions en dictionnaires
+        mentions_data = []
+        for m in mentions:
+            mentions_data.append({
+                'title': m.title,
+                'content': m.content,
+                'sentiment': m.sentiment,
+                'source': m.source,
+                'source_url': m.source_url,
+                'author': m.author,
+                'engagement_score': m.engagement_score,
+                'published_at': m.published_at.isoformat() if m.published_at else None
             })
         
-        return verbatims
-    
-    def _calculate_priority_score(self, mention) -> int:
-        """Calculer un score de priorité pour un mention"""
-        score = mention.engagement_score
+        # Calculer la distribution des sentiments
+        sentiment_dist = {'positive': 0, 'neutral': 0, 'negative': 0}
+        for m in mentions:
+            if m.sentiment:
+                sentiment_dist[m.sentiment] = sentiment_dist.get(m.sentiment, 0) + 1
         
-        # Bonus selon le tier de l'influenceur
-        author_lower = mention.author.lower()
-        if any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_1']):
-            score += 10000  # Gros bonus pour tier 1
-        elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_2']):
-            score += 5000   # Bonus moyen pour tier 2
-        elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_3']):
-            score += 2000   # Petit bonus pour tier 3
+        # Statistiques par source
+        source_counts = Counter([m.source for m in mentions])
         
-        return int(score)
-    
-    def _generate_enriched_risk_assessment(self, mentions: List, days: int) -> Dict:
-        """Évaluation enrichie avec évolution temporelle, insights et métriques détaillées"""
-        if not mentions:
-            return {
-                'risk_level': 'FAIBLE',
-                'risk_score': 0,
-                'explanation': 'Aucune mention détectée sur la période.',
-                'factors': {},
-                'evolution': [],
-                'insight': 'Absence de données - surveillance recommandée.',
-                'signal_principal': 'Aucune activité détectée',
-                'action_prioritaire': 'Lancer une première campagne de communication'
-            }
+        # Statistiques d'engagement
+        engagement_scores = [m.engagement_score for m in mentions]
+        engagement_stats = {
+            'total': sum(engagement_scores),
+            'average': sum(engagement_scores) / len(engagement_scores) if engagement_scores else 0,
+            'max': max(engagement_scores) if engagement_scores else 0
+        }
         
-        total_mentions = len(mentions)
-        
-        # === FACTEURS DE RISQUE ===
-        volume_score = min(total_mentions / (days * 10), 1.0)
-        
-        negative_mentions = [m for m in mentions if m.sentiment == 'negative']
-        neutral_mentions = [m for m in mentions if m.sentiment == 'neutral']
-        negative_ratio = len(negative_mentions) / total_mentions
-        neutral_ratio = len(neutral_mentions) / total_mentions
-        sentiment_score = negative_ratio
-        
-        avg_engagement = sum(m.engagement_score for m in mentions) / len(mentions)
-        max_engagement = max(m.engagement_score for m in mentions)
-        engagement_score = min((avg_engagement + max_engagement) / 2000, 1.0)
-        
-        # === ÉVOLUTION TEMPORELLE (par semaine) ===
+        # Données temporelles
         timeline = {}
         for mention in mentions:
             if mention.published_at:
                 date_key = mention.published_at.date()
                 timeline[date_key] = timeline.get(date_key, 0) + 1
         
-        weekly_data = []
-        if timeline:
-            sorted_dates = sorted(timeline.keys())
-            weeks = (sorted_dates[-1] - sorted_dates[0]).days // 7 + 1
+        time_trends = [
+            {'date': str(date), 'count': count}
+            for date, count in sorted(timeline.items())
+        ]
+        
+        # Données d'influenceurs
+        influencers_data = []
+        author_stats = {}
+        for mention in mentions:
+            author = mention.author
+            if author not in author_stats:
+                author_stats[author] = {
+                    'author': author,
+                    'source': mention.source,
+                    'mention_count': 0,
+                    'total_engagement': 0,
+                    'sentiments': []
+                }
             
-            for week_num in range(min(weeks, 4)):
-                start_date = sorted_dates[0] + timedelta(days=week_num * 7)
-                end_date = start_date + timedelta(days=7)
-                
-                week_mentions = sum(
-                    timeline.get(d, 0) 
-                    for d in timeline.keys() 
-                    if start_date <= d < end_date
-                )
-                
-                if week_mentions > 0:
-                    weekly_data.append({
-                        'week': f'Semaine {week_num + 1} ({start_date.strftime("%d/%m")}-{end_date.strftime("%d/%m")})',
-                        'mentions': week_mentions,
-                        'trend': self._calculate_trend_icon(weekly_data, week_mentions) if weekly_data else 'Stable'
-                    })
+            author_stats[author]['mention_count'] += 1
+            author_stats[author]['total_engagement'] += mention.engagement_score
+            if mention.sentiment:
+                author_stats[author]['sentiments'].append(mention.sentiment)
         
-        # Détection de pics
-        spike_score = 0
-        peak_detected = False
-        peak_week = None
+        for author, stats in author_stats.items():
+            sentiments = stats['sentiments']
+            positive_ratio = sentiments.count('positive') / len(sentiments) if sentiments else 0
+            
+            influencers_data.append({
+                'author': author,
+                'source': stats['source'],
+                'mention_count': stats['mention_count'],
+                'total_engagement': stats['total_engagement'],
+                'sentiment_score': positive_ratio * 100,
+                'avg_engagement': stats['total_engagement'] / stats['mention_count']
+            })
         
-        if timeline:
-            daily_counts = list(timeline.values())
-            if len(daily_counts) >= 2:
-                avg_daily = statistics.mean(daily_counts)
-                stddev = statistics.stdev(daily_counts) if len(daily_counts) > 1 else 0
-                max_daily = max(daily_counts)
-                
-                if stddev > 0:
-                    z_score = (max_daily - avg_daily) / stddev
-                    peak_detected = z_score > 2.0
-                    spike_score = min(z_score / 5, 1.0)
-                    
-                    if peak_detected and weekly_data:
-                        peak_week = max(weekly_data, key=lambda w: w['mentions'])
+        # Trier par engagement total
+        influencers_data.sort(key=lambda x: x['total_engagement'], reverse=True)
         
-        # Diversité sources
-        sources = set(m.source for m in mentions)
-        source_diversity_score = min(len(sources) / 5, 1.0)
-        
-        # === SCORE GLOBAL ===
-        risk_score = (
-            volume_score * 25 +
-            sentiment_score * 30 +
-            engagement_score * 20 +
-            spike_score * 15 +
-            source_diversity_score * 10
+        return AnalysisContext(
+            mentions=mentions_data,
+            keywords=keywords,
+            period_days=days,
+            total_mentions=len(mentions),
+            sentiment_distribution=sentiment_dist,
+            top_sources=dict(source_counts.most_common(5)),
+            engagement_stats=engagement_stats,
+            geographic_data=[],  # À implémenter selon vos besoins
+            influencers_data=influencers_data,
+            time_trends=time_trends,
+            web_content=[]  # Sera rempli par l'agent IA
         )
+    
+    def _generate_smart_analysis(self, mentions: List, days: int, ai_analysis: Dict) -> Dict:
+        """Générer une analyse intelligente basée sur l'IA"""
         
-        if risk_score >= 70:
+        # Extraire les insights IA
+        sentiment_insights = ai_analysis.get('sentiment', {}).get('analysis', '')
+        trend_insights = ai_analysis.get('trends', {}).get('analysis', '')
+        influencer_insights = ai_analysis.get('influencers', {}).get('analysis', '')
+        web_insights = ai_analysis.get('web_content', {}).get('analysis', '')
+        
+        # Calculer des métriques intelligentes
+        total_mentions = len(mentions)
+        avg_engagement = sum(m.engagement_score for m in mentions) / total_mentions if total_mentions > 0 else 0
+        
+        # Score de viralité
+        high_engagement_mentions = [m for m in mentions if m.engagement_score > avg_engagement * 2]
+        virality_score = len(high_engagement_mentions) / total_mentions if total_mentions > 0 else 0
+        
+        # Score de diversité des sources
+        unique_sources = len(set(m.source for m in mentions))
+        diversity_score = min(unique_sources / 5, 1.0)  # Normaliser sur 5 sources
+        
+        return {
+            'summary': f"Analyse de {total_mentions} mentions sur {days} jours avec insights IA avancés",
+            'key_insights': [
+                sentiment_insights[:100] + "..." if len(sentiment_insights) > 100 else sentiment_insights,
+                trend_insights[:100] + "..." if len(trend_insights) > 100 else trend_insights,
+                influencer_insights[:100] + "..." if len(influencer_insights) > 100 else influencer_insights
+            ],
+            'web_context': web_insights[:200] + "..." if len(web_insights) > 200 else web_insights,
+            'intelligence_metrics': {
+                'virality_score': round(virality_score, 3),
+                'diversity_score': round(diversity_score, 3),
+                'avg_engagement': round(avg_engagement, 2),
+                'ai_confidence': ai_analysis.get('executive_summary', {}).get('key_metrics', {}).get('analysis_confidence', 0.0)
+            }
+        }
+    
+    def _analyze_engagement_patterns(self, mentions: List, ai_analysis: Dict) -> Dict:
+        """Analyser les patterns d'engagement avec l'IA"""
+        
+        if not mentions:
+            return {'pattern': 'Aucune donnée', 'insights': []}
+        
+        # Analyser la distribution temporelle de l'engagement
+        daily_engagement = {}
+        for mention in mentions:
+            if mention.published_at:
+                date_key = mention.published_at.date()
+                if date_key not in daily_engagement:
+                    daily_engagement[date_key] = {'count': 0, 'total_engagement': 0}
+                daily_engagement[date_key]['count'] += 1
+                daily_engagement[date_key]['total_engagement'] += mention.engagement_score
+        
+        # Calculer les moyennes quotidiennes
+        daily_averages = []
+        for date, data in daily_engagement.items():
+            avg_engagement = data['total_engagement'] / data['count'] if data['count'] > 0 else 0
+            daily_averages.append({
+                'date': str(date),
+                'avg_engagement': avg_engagement,
+                'mention_count': data['count']
+            })
+        
+        # Identifier les pics d'engagement
+        if daily_averages:
+            avg_global = sum(d['avg_engagement'] for d in daily_averages) / len(daily_averages)
+            peaks = [d for d in daily_averages if d['avg_engagement'] > avg_global * 1.5]
+        else:
+            peaks = []
+        
+        # Extraire les insights IA sur l'engagement
+        web_engagement = ai_analysis.get('web_content', {}).get('engagement_patterns', {})
+        
+        return {
+            'pattern': 'Variable' if len(peaks) > 2 else 'Stable',
+            'daily_averages': daily_averages[-7:],  # 7 derniers jours
+            'engagement_peaks': peaks,
+            'web_engagement_rate': web_engagement.get('engagement_rate', 0),
+            'authenticity_indicators': {
+                'web_authenticity': ai_analysis.get('web_content', {}).get('authenticity_score', 0),
+                'comment_quality': 'High' if web_engagement.get('comments_with_likes', 0) > 0 else 'Low'
+            },
+            'insights': [
+                f"Pics d'engagement détectés: {len(peaks)} jours",
+                f"Taux d'engagement web: {web_engagement.get('engagement_rate', 0):.1%}",
+                f"Authenticité estimée: {ai_analysis.get('web_content', {}).get('authenticity_score', 0):.1f}/1.0"
+            ]
+        }
+    
+    def _assess_content_authenticity(self, ai_analysis: Dict) -> Dict:
+        """Évaluer l'authenticité du contenu avec l'IA"""
+        
+        # Récupérer les analyses d'authenticité de l'IA
+        web_analysis = ai_analysis.get('web_content', {})
+        sentiment_analysis = ai_analysis.get('sentiment', {})
+        
+        authenticity_score = web_analysis.get('authenticity_score', 0.5)
+        
+        # Déterminer le niveau d'authenticité
+        if authenticity_score >= 0.8:
+            authenticity_level = "ÉLEVÉE"
+            color = "#10b981"
+        elif authenticity_score >= 0.6:
+            authenticity_level = "MODÉRÉE"
+            color = "#f59e0b"
+        else:
+            authenticity_level = "FAIBLE"
+            color = "#ef4444"
+        
+        # Indicateurs d'authenticité
+        indicators = []
+        
+        if web_analysis.get('comment_insights', {}).get('unique_authors', 0) > 0:
+            unique_ratio = web_analysis['comment_insights']['unique_authors'] / max(web_analysis['comment_insights'].get('total_comments', 1), 1)
+            indicators.append(f"Diversité des commentateurs: {unique_ratio:.1%}")
+        
+        if 'web_vs_mentions' in sentiment_analysis:
+            alignment = sentiment_analysis['web_vs_mentions'].get('alignment', 'Unknown')
+            indicators.append(f"Cohérence sentiment mentions/web: {alignment}")
+        
+        web_engagement = web_analysis.get('engagement_patterns', {})
+        if web_engagement.get('total_comments', 0) > 0:
+            indicators.append(f"Engagement réel détecté: {web_engagement['total_comments']} commentaires")
+        
+        return {
+            'authenticity_level': authenticity_level,
+            'authenticity_score': round(authenticity_score, 2),
+            'color': color,
+            'indicators': indicators,
+            'red_flags': self._detect_red_flags(ai_analysis),
+            'confidence': 'High' if len(indicators) >= 3 else 'Medium' if len(indicators) >= 2 else 'Low'
+        }
+    
+    def _detect_red_flags(self, ai_analysis: Dict) -> List[str]:
+        """Détecter les signaux d'alarme d'inauthenticité"""
+        red_flags = []
+        
+        web_analysis = ai_analysis.get('web_content', {})
+        
+        # Authenticité faible
+        if web_analysis.get('authenticity_score', 1.0) < 0.5:
+            red_flags.append("Score d'authenticité faible détecté par l'IA")
+        
+        # Peu de commentaires uniques
+        comment_insights = web_analysis.get('comment_insights', {})
+        if comment_insights.get('total_comments', 0) > 0:
+            unique_ratio = comment_insights.get('unique_authors', 0) / comment_insights['total_comments']
+            if unique_ratio < 0.7:
+                red_flags.append("Faible diversité des commentateurs")
+        
+        # Divergence sentiment mentions/web
+        sentiment_analysis = ai_analysis.get('sentiment', {})
+        if sentiment_analysis.get('web_vs_mentions', {}).get('alignment') == 'Divergent':
+            red_flags.append("Divergence entre sentiment officiel et réactions publiques")
+        
+        return red_flags
+    
+    def _generate_actionable_recommendations(self, ai_analysis: Dict, mentions: List) -> Dict:
+        """Générer des recommandations actionnables basées sur l'IA"""
+        
+        recommendations = {
+            'immediate': [],
+            'short_term': [],
+            'long_term': []
+        }
+        
+        # Recommandations basées sur les insights IA
+        sentiment_insights = ai_analysis.get('sentiment', {}).get('key_insights', [])
+        influencer_analysis = ai_analysis.get('influencers', {})
+        web_analysis = ai_analysis.get('web_content', {})
+        
+        # Recommandations immédiates
+        executive_summary = ai_analysis.get('executive_summary', {})
+        if executive_summary.get('priority_level') == 'CRITIQUE':
+            recommendations['immediate'].append({
+                'action': '🚨 Activation de la cellule de crise',
+                'reason': 'Niveau de priorité critique détecté par l\'IA',
+                'deadline': '2h'
+            })
+        
+        # Gestion des influenceurs à risque
+        high_risk_influencers = influencer_analysis.get('risk_assessment', {}).get('high_risk', [])
+        if high_risk_influencers:
+            recommendations['immediate'].append({
+                'action': f'📞 Contact direct avec {len(high_risk_influencers)} influenceur(s) critique(s)',
+                'reason': 'Influenceurs à risque élevé identifiés',
+                'deadline': '24h'
+            })
+        
+        # Recommandations à court terme
+        if web_analysis.get('authenticity_score', 1.0) < 0.6:
+            recommendations['short_term'].append({
+                'action': '🔍 Investigation approfondie de l\'authenticité',
+                'reason': 'Score d\'authenticité faible détecté',
+                'timeline': '48h'
+            })
+        
+        # Opportunités de communication
+        if any('opportunité' in insight.lower() for insight in sentiment_insights):
+            recommendations['short_term'].append({
+                'action': '💬 Campagne de communication ciblée',
+                'reason': 'Opportunités identifiées par l\'analyse IA',
+                'timeline': '1 semaine'
+            })
+        
+        # Recommandations à long terme
+        if web_analysis.get('comment_insights', {}).get('total_comments', 0) > 50:
+            recommendations['long_term'].append({
+                'action': '👥 Programme d\'engagement communautaire',
+                'reason': 'Communauté active détectée dans les commentaires',
+                'timeline': '1 mois'
+            })
+        
+        # Surveillance continue
+        trend_analysis = ai_analysis.get('trends', {})
+        if trend_analysis.get('alert_level') in ['modéré', 'élevé']:
+            recommendations['long_term'].append({
+                'action': '📊 Renforcement du système de surveillance',
+                'reason': 'Tendances volatiles détectées',
+                'timeline': 'Continu'
+            })
+        
+        return recommendations
+    
+    def _generate_enhanced_risk_assessment(self, mentions: List, days: int, ai_analysis: Dict) -> Dict:
+        """Générer une évaluation de risque enrichie avec l'IA"""
+        
+        if not mentions:
+            return {
+                'risk_level': 'FAIBLE',
+                'risk_score': 0,
+                'ai_assessment': 'Aucune donnée à analyser'
+            }
+        
+        # Calculs de base
+        total_mentions = len(mentions)
+        negative_mentions = [m for m in mentions if m.sentiment == 'negative']
+        negative_ratio = len(negative_mentions) / total_mentions
+        
+        avg_engagement = sum(m.engagement_score for m in mentions) / len(mentions)
+        max_engagement = max(m.engagement_score for m in mentions)
+        
+        # Score de base
+        volume_score = min(total_mentions / (days * 10), 1.0) * 25
+        sentiment_score = negative_ratio * 30
+        engagement_score = min((avg_engagement + max_engagement) / 2000, 1.0) * 20
+        
+        base_risk_score = volume_score + sentiment_score + engagement_score
+        
+        # Ajustement avec l'IA
+        executive_summary = ai_analysis.get('executive_summary', {})
+        ai_priority = executive_summary.get('priority_level', 'NORMAL')
+        
+        ai_adjustment = 0
+        if ai_priority == 'CRITIQUE':
+            ai_adjustment = 25
+        elif ai_priority == 'MODÉRÉ':
+            ai_adjustment = 15
+        
+        # Facteur d'authenticité
+        authenticity_score = ai_analysis.get('web_content', {}).get('authenticity_score', 1.0)
+        if authenticity_score < 0.5:
+            ai_adjustment += 10  # Risque supplémentaire si contenu suspect
+        
+        final_score = min(base_risk_score + ai_adjustment, 100)
+        
+        # Déterminer le niveau
+        if final_score >= 75:
+            risk_level = 'CRITIQUE'
+            color = '#dc2626'
+        elif final_score >= 50:
             risk_level = 'ÉLEVÉ'
             color = '#ef4444'
-        elif risk_score >= 40:
+        elif final_score >= 30:
             risk_level = 'MODÉRÉ'
             color = '#f59e0b'
         else:
             risk_level = 'FAIBLE'
             color = '#10b981'
         
-        # === SIGNAL PRINCIPAL ===
-        if neutral_ratio > 0.6:
-            signal_principal = f"Public divisé sur la crédibilité avec {int(neutral_ratio*100)}% de neutralité = opportunité"
-        elif negative_ratio > 0.4:
-            signal_principal = f"Sentiment critique prédominant ({int(negative_ratio*100)}%) nécessitant réponse immédiate"
-        elif peak_detected and peak_week:
-            signal_principal = f"Pic inhabituel en {peak_week['week']} - {peak_week['mentions']} mentions"
-        else:
-            signal_principal = "Situation stable avec opinion malléable"
-        
-        # === TENDANCE GLOBALE ===
-        if len(weekly_data) >= 2:
-            first_week = weekly_data[0]['mentions']
-            last_week = weekly_data[-1]['mentions']
-            change_pct = ((last_week - first_week) / first_week * 100) if first_week > 0 else 0
-            
-            if change_pct > 20:
-                trend = f"↗ +{int(change_pct)}% (en croissance)"
-            elif change_pct < -20:
-                trend = f"↘ {int(change_pct)}% (en déclin)"
-            else:
-                trend = "→ Stable"
-        else:
-            trend = "Données insuffisantes"
-        
-        # === INSIGHT CLÉ ===
-        if neutral_ratio > 0.6:
-            insight = f"💡 Les {int(neutral_ratio*100)}% de mentions neutres représentent un public encore malléable. Campagne de transparence sur le processus dans les 7 prochains jours peut convertir 40-60% de ce segment en opinion favorable."
-        elif negative_ratio > 0.5:
-            insight = f"⚠️ Seuil critique avec {int(negative_ratio*100)}% de sentiment négatif. Mise en place urgente d'une cellule de crise et engagement direct avec les influenceurs critiques sous 48h requis."
-        elif peak_detected:
-            insight = f"📊 Pic d'engagement corrélé avec [événement spécifique à identifier]. La baisse relative en dernière semaine suggère un essoufflement - maintenir la pression communicationnelle."
-        else:
-            insight = f"✅ Situation maîtrisée: {total_mentions} mentions sur {days} jours (moyenne {total_mentions/days:.1f}/jour). Capitaliser sur la dynamique positive et maintenir la surveillance standard."
-        
-        # === ACTION PRIORITAIRE ===
-        if risk_level == 'ÉLEVÉ':
-            action_prioritaire = "Engagement immédiat avec les 3 influenceurs majeurs + publication calendrier détaillé dans les 48h"
-        elif neutral_ratio > 0.6:
-            action_prioritaire = "Campagne de transparence sur le processus électoral dans les 7 prochains jours"
-        else:
-            action_prioritaire = "Maintenir surveillance + capitaliser sur acquis positifs"
-        
         return {
             'risk_level': risk_level,
-            'risk_score': round(risk_score, 1),
+            'risk_score': round(final_score, 1),
             'color': color,
-            'explanation': f"Niveau de risque {risk_level} ({risk_score:.1f}/100) basé sur {total_mentions} mentions analysées",
-            'signal_principal': signal_principal,
-            'trend': trend,
-            'insight': insight,
-            'action_prioritaire': action_prioritaire,
-            'factors': {
-                'volume': {
-                    'score': round(volume_score * 100, 1), 
-                    'weight': '25%',
-                    'detail': f'{total_mentions} mentions ({total_mentions/days:.1f}/jour)'
-                },
-                'sentiment': {
-                    'score': round(sentiment_score * 100, 1), 
-                    'weight': '30%',
-                    'detail': f'Ratio négatif {int(negative_ratio*100)}%'
-                },
-                'engagement': {
-                    'score': round(engagement_score * 100, 1), 
-                    'weight': '20%',
-                    'detail': f'Pointe à {int(max_engagement)}'
-                },
-                'spike': {
-                    'score': round(spike_score * 100, 1), 
-                    'weight': '15%',
-                    'detail': '⚡ Pic détecté' if peak_detected else 'Stable'
-                },
-                'diversity': {
-                    'score': round(source_diversity_score * 100, 1), 
-                    'weight': '10%',
-                    'detail': f'{len(sources)} sources'
-                }
+            'ai_assessment': executive_summary.get('summary', 'Analyse IA non disponible'),
+            'contributing_factors': {
+                'volume': round(volume_score, 1),
+                'sentiment': round(sentiment_score, 1),
+                'engagement': round(engagement_score, 1),
+                'ai_intelligence': ai_adjustment,
+                'authenticity_concern': 10 if authenticity_score < 0.5 else 0
             },
-            'evolution': weekly_data
+            'alert_status': executive_summary.get('key_metrics', {}).get('alert_status', 'NORMAL'),
+            'confidence_level': executive_summary.get('key_metrics', {}).get('analysis_confidence', 0.0)
         }
     
-    def _calculate_trend_icon(self, previous_weeks: List, current_count: int) -> str:
-        """Calculer l'icône de tendance"""
-        if not previous_weeks:
-            return "→"
+    def _extract_web_insights(self, ai_analysis: Dict) -> Dict:
+        """Extraire les insights spécifiques au contenu web"""
         
-        last_week_count = previous_weeks[-1]['mentions']
-        if current_count > last_week_count * 1.15:
-            return "↗↗"
-        elif current_count > last_week_count * 1.05:
-            return "↗"
-        elif current_count < last_week_count * 0.85:
-            return "↘"
-        else:
-            return "→"
-    
-    def _analyze_positive_sentiment_enriched(self, positive_mentions: List, all_mentions: List) -> Dict:
-        """Analyse enrichie des jugements positifs avec verbatims priorisés et contexte stratégique"""
-        if not positive_mentions:
+        web_analysis = ai_analysis.get('web_content', {})
+        
+        if not web_analysis or 'error' in web_analysis:
             return {
-                'count': 0,
-                'percentage': 0,
-                'analysis': "Aucun commentaire positif significatif identifié.",
-                'key_themes': [],
-                'verbatims': [],
-                'strategic_context': "L'absence de réactions positives mérite une attention - opportunité de créer des narratifs favorables."
+                'available': False,
+                'reason': 'Analyse web non disponible ou erreur lors de l\'extraction'
             }
         
-        total = len(all_mentions)
-        percentage = (len(positive_mentions) / total * 100) if total > 0 else 0
-        
-        # Extraction thèmes positifs
-        themes = self._extract_themes(positive_mentions, positive=True)
-        
-        # Verbatims représentatifs avec priorité aux activistes (AMÉLIORÉ)
-        verbatims = self._get_prioritized_verbatims(positive_mentions, 'positive', max_count=3)
+        article_insights = web_analysis.get('article_insights', [])
+        comment_insights = web_analysis.get('comment_insights', {})
         
         return {
-            'count': len(positive_mentions),
-            'percentage': round(percentage, 1),
-            'analysis': f"L'analyse révèle {len(positive_mentions)} mentions à connotation positive ({percentage:.1f}% du total), témoignant d'une réception favorable sur certains aspects clés. Ces réactions constituent un capital de confiance précieux qu'il convient de consolider et d'amplifier stratégiquement.",
-            'key_themes': themes[:5],
-            'verbatims': verbatims,
-            'strategic_context': f"Ces {len(positive_mentions)} voix favorables reflètent l'efficacité de certains messages institutionnels. Amplifier ces narratifs via les influenceurs positifs pour élargir la base de soutien."
+            'available': True,
+            'articles_analyzed': len(article_insights),
+            'total_comments': comment_insights.get('total_comments', 0),
+            'unique_commentators': comment_insights.get('unique_authors', 0),
+            'top_domains': [article['domain'] for article in article_insights[:5]],
+            'most_engaged_comment': comment_insights.get('top_engaged_comments', [{}])[0] if comment_insights.get('top_engaged_comments') else None,
+            'authenticity_assessment': web_analysis.get('authenticity_score', 0),
+            'key_findings': [
+                f"{len(article_insights)} articles analysés en profondeur",
+                f"{comment_insights.get('total_comments', 0)} commentaires extraits et analysés",
+                f"Score d'authenticité: {web_analysis.get('authenticity_score', 0):.1f}/1.0",
+                f"Taux d'engagement: {web_analysis.get('engagement_patterns', {}).get('engagement_rate', 0):.1%}"
+            ]
         }
-    
-    def _analyze_negative_sentiment_enriched(self, negative_mentions: List, all_mentions: List) -> Dict:
-        """Analyse enrichie des jugements négatifs avec préoccupations et contexte d'urgence"""
-        if not negative_mentions:
-            return {
-                'count': 0,
-                'percentage': 0,
-                'analysis': "Aucun commentaire négatif significatif détecté.",
-                'key_concerns': [],
-                'verbatims': [],
-                'strategic_context': "Absence de critiques majeures - période de relative stabilité."
-            }
-        
-        total = len(all_mentions)
-        percentage = (len(negative_mentions) / total * 100) if total > 0 else 0
-        
-        # Extraction préoccupations
-        concerns = self._extract_themes(negative_mentions, positive=False)
-        
-        # Verbatims critiques représentatifs avec priorité aux activistes (AMÉLIORÉ)
-        verbatims = self._get_prioritized_verbatims(negative_mentions, 'negative', max_count=3)
-        
-        # Ajouter niveau d'alerte pour chaque verbatim
-        for verbatim in verbatims:
-            if verbatim['engagement'] > 1000:
-                verbatim['alert_level'] = '🔴 ÉLEVÉ'
-            elif verbatim['engagement'] > 500:
-                verbatim['alert_level'] = '🟡 MODÉRÉ'
-            else:
-                verbatim['alert_level'] = '🟢 FAIBLE'
-        
-        # Risque de viralisation
-        high_engagement_negative = [m for m in negative_mentions if m.engagement_score > 500]
-        viral_risk = "ÉLEVÉ" if len(high_engagement_negative) > 2 else "MODÉRÉ" if len(high_engagement_negative) > 0 else "FAIBLE"
-        
-        return {
-            'count': len(negative_mentions),
-            'percentage': round(percentage, 1),
-            'analysis': f"L'analyse identifie {len(negative_mentions)} mentions à caractère critique ({percentage:.1f}%), révélant des points de tension dans l'opinion publique. Ces signaux d'alarme nécessitent une attention immédiate et une réponse stratégique coordonnée pour prévenir toute escalade.",
-            'key_concerns': concerns[:5],
-            'verbatims': verbatims,
-            'viral_risk': viral_risk,
-            'strategic_context': f"Risque de viralisation {viral_risk} - {len(high_engagement_negative)} mentions critiques à fort engagement. Ces critiques peuvent constituer le terreau d'une mobilisation plus large si non traitées sous 48-72h. Engagement direct avec les auteurs majeurs recommandé."
-        }
-    
-    def _analyze_neutral_sentiment_enriched(self, neutral_mentions: List, all_mentions: List) -> Dict:
-        """Analyse enrichie des jugements neutres avec potentiel d'influence"""
-        if not neutral_mentions:
-            return {
-                'count': 0,
-                'percentage': 0,
-                'analysis': "Aucune mention neutre significative.",
-                'observation_themes': [],
-                'strategic_context': "Polarisation forte de l'opinion."
-            }
-        
-        total = len(all_mentions)
-        percentage = (len(neutral_mentions) / total * 100) if total > 0 else 0
-        
-        # Catégorisation des neutres
-        info_relays = [m for m in neutral_mentions if len(m.content) < 100]
-        factual_questions = [m for m in neutral_mentions if '?' in m.title or '?' in m.content]
-        
-        themes = self._extract_themes(neutral_mentions, positive=None)
-        
-        return {
-            'count': len(neutral_mentions),
-            'percentage': round(percentage, 1),
-            'analysis': f"Les {len(neutral_mentions)} mentions neutres ({percentage:.1f}%) reflètent une approche observatrice et factuelle. Cette neutralité représente un terreau fertile pour l'influence, ces audiences étant potentiellement réceptives à des arguments bien construits.",
-            'observation_themes': themes[:5],
-            'breakdown': {
-                'relais_info': len(info_relays),
-                'questions_factuelles': len(factual_questions),
-                'comparaisons': len(neutral_mentions) - len(info_relays) - len(factual_questions)
-            },
-            'strategic_context': f"💡 OPPORTUNITÉ STRATÉGIQUE: Ces {len(neutral_mentions)} voix neutres constituent un segment clé susceptible de basculer avec une communication ciblée. Campagne d'information factuelle et transparente peut convertir 40-60% selon benchmarks régionaux."
-        }
-    
-    def _generate_enriched_synthesis(
-        self, 
-        positive: List, 
-        negative: List, 
-        neutral: List,
-        all_mentions: List,
-        days: int
-    ) -> Dict:
-        """Synthèse stratégique enrichie avec comparatif"""
-        total = len(positive) + len(negative) + len(neutral)
-        
-        if total == 0:
-            return {
-                'total_analyzed': 0,
-                'distribution': {},
-                'dominant_trend': 'Indéterminé',
-                'strategic_assessment': "Absence de données.",
-                'recommendation': "Intensifier la collecte."
-            }
-        
-        pos_pct = (len(positive) / total) * 100
-        neg_pct = (len(negative) / total) * 100
-        neu_pct = (len(neutral) / total) * 100
-        
-        # Ratio positif/négatif
-        ratio_pos_neg = len(positive) / len(negative) if len(negative) > 0 else float('inf')
-        
-        # Tendance dominante
-        if pos_pct > neg_pct and pos_pct > neu_pct:
-            dominant_trend = "Favorable"
-            trend_icon = "✅"
-            trend_analysis = f"Les réactions positives dominent ({pos_pct:.1f}%), traduisant une adhésion majoritaire aux messages institutionnels. Ratio positif/négatif de {ratio_pos_neg:.1f}:1."
-        elif neg_pct > pos_pct and neg_pct > neu_pct:
-            dominant_trend = "Critique"
-            trend_icon = "⚠️"
-            trend_analysis = f"Les réactions négatives prédominent ({neg_pct:.1f}%), signalant une crise de confiance nécessitant réponse coordonnée immédiate."
-        else:
-            dominant_trend = "Mitigé/Neutre"
-            trend_icon = "⚖️"
-            trend_analysis = f"L'opinion publique apparaît divisée avec {neu_pct:.1f}% de neutres, révélant une opportunité de conquête des indécis."
-        
-        # Comparaison avec période précédente (si données disponibles)
-        comparison_note = "Première période analysée - pas de comparaison disponible"
-        
-        # Fenêtre d'action
-        if neu_pct > 60:
-            window_action = "⏰ Fenêtre de 7 jours pour influencer le narratif"
-        elif neg_pct > 50:
-            window_action = "🚨 Fenêtre critique de 48h pour réponse urgente"
-        else:
-            window_action = "✅ Situation stable - capitaliser sur acquis"
-        
-        return {
-            'total_analyzed': total,
-            'distribution': {
-                'positive': {'count': len(positive), 'percentage': round(pos_pct, 1)},
-                'negative': {'count': len(negative), 'percentage': round(neg_pct, 1)},
-                'neutral': {'count': len(neutral), 'percentage': round(neu_pct, 1)}
-            },
-            'ratio_pos_neg': f"{ratio_pos_neg:.1f}:1" if ratio_pos_neg != float('inf') else "N/A",
-            'dominant_trend': f"{trend_icon} {dominant_trend}",
-            'strategic_assessment': trend_analysis,
-            'window_action': window_action,
-            'comparison': comparison_note,
-            'recommendation': self._generate_synthesis_recommendation(pos_pct, neg_pct, neu_pct)
-        }
-    
-    def _generate_synthesis_recommendation(self, pos_pct: float, neg_pct: float, neu_pct: float) -> str:
-        """Générer recommandation basée sur distribution"""
-        if pos_pct > 50:
-            return "✅ Capitaliser sur l'élan positif: amplifier messages résonnants + communication cohérente et régulière."
-        elif neg_pct > 50:
-            return "🚨 URGENCE: Stratégie de gestion de crise - identifier sources mécontentement + contre-narratifs factuels + dialogue avec parties prenantes."
-        elif neu_pct > 40:
-            return "🎯 OPPORTUNITÉ: Cibler audiences neutres avec messages persuasifs et preuves tangibles pour conversion en soutiens actifs."
-        else:
-            return "⚖️ Approche équilibrée: consolider acquis positifs + adresser proactivement préoccupations voix critiques."
-    
-    def _analyze_engaged_influencers_enriched(self, targeted_mentions: List, all_mentions: List) -> Dict:
-        """Analyse enrichie des influenceurs avec profils détaillés et évaluation de risque"""
-        if not targeted_mentions:
-            return {
-                'total_identified': 0,
-                'analysis': "Aucun influenceur majeur identifié.",
-                'influencers_table': [],
-                'strategic_context': "Désintérêt ou stratégie d'attentisme des leaders d'opinion."
-            }
-        
-        # Regrouper par auteur
-        influencer_data = {}
-        for mention in targeted_mentions:
-            author = mention.author
-            if author not in influencer_data:
-                influencer_data[author] = {
-                    'mentions': [],
-                    'total_engagement': 0,
-                    'sentiment_distribution': {'positive': 0, 'negative': 0, 'neutral': 0}
-                }
-            
-            influencer_data[author]['mentions'].append(mention)
-            influencer_data[author]['total_engagement'] += mention.engagement_score
-            
-            if mention.sentiment:
-                influencer_data[author]['sentiment_distribution'][mention.sentiment] += 1
-        
-        # Créer tableau enrichi
-        influencers_table = []
-        for author, data in influencer_data.items():
-            mention_count = len(data['mentions'])
-            total_eng = data['total_engagement']
-            avg_engagement = total_eng / mention_count
-            
-            # Analyser sentiment
-            sentiment_dist = data['sentiment_distribution']
-            total_sentiment = sum(sentiment_dist.values())
-            
-            if total_sentiment > 0:
-                pos_ratio = sentiment_dist['positive'] / total_sentiment
-                neg_ratio = sentiment_dist['negative'] / total_sentiment
-                
-                if neg_ratio > 0.6:
-                    sentiment_tendency = "⚠️ Critique"
-                    risk_level = "ÉLEVÉ"
-                    risk_color = "#ef4444"
-                elif pos_ratio > 0.6:
-                    sentiment_tendency = "✅ Favorable"
-                    risk_level = "Faible"
-                    risk_color = "#10b981"
-                else:
-                    sentiment_tendency = "⚖️ Mitigé"
-                    risk_level = "Modéré"
-                    risk_color = "#f59e0b"
-            else:
-                sentiment_tendency = "Indéterminé"
-                risk_level = "Modéré"
-                risk_color = "#6b7280"
-            
-            # Plateforme principale
-            sources = [m.source for m in data['mentions']]
-            main_platform = max(set(sources), key=sources.count) if sources else "Inconnu"
-            
-            # Portée estimée
-            if avg_engagement > 50000:
-                estimated_reach = "🔥 Très Élevée (>100K)"
-            elif avg_engagement > 5000:
-                estimated_reach = "📈 Élevée (10K-100K)"
-            elif avg_engagement > 500:
-                estimated_reach = "📊 Modérée (1K-10K)"
-            else:
-                estimated_reach = "📉 Limitée (<1K)"
-            
-            # Profil et recommandations avec classification par tier
-            author_lower = author.lower()
-            if any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_1']):
-                profile = "🔴 ACTIVISTE POLITIQUE MAJEUR"
-                action = "Contact direct Présidence/PM sous 24h"
-            elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_2']):
-                profile = "🟡 JOURNALISTE/MÉDIA INFLUENT"
-                action = "Interview exclusive ou briefing privilégié"
-            elif risk_level == "ÉLEVÉ":
-                profile = "🟠 INFLUENCEUR À RISQUE CRITIQUE"
-                action = "Engagement direct requis sous 48h"
-            elif avg_engagement > 10000:
-                profile = "🟢 INFLUENCEUR MAJEUR"
-                action = "Dialogue constructif recommandé"
-            else:
-                profile = "⚫ Influenceur Standard"
-                action = "Surveillance continue"
-            
-            influencers_table.append({
-                'name': author,
-                'profile': profile,
-                'platform': main_platform,
-                'mentions_count': mention_count,
-                'total_engagement': int(total_eng),
-                'avg_engagement': int(avg_engagement),
-                'sentiment_tendency': sentiment_tendency,
-                'risk_level': risk_level,
-                'risk_color': risk_color,
-                'estimated_reach': estimated_reach,
-                'last_activity': max([m.published_at for m in data['mentions'] if m.published_at]).strftime('%d/%m/%Y'),
-                'action_recommended': action,
-                'priority_score': self._calculate_priority_score(data['mentions'][0]) if data['mentions'] else 0
-            })
-        
-        # Trier par score de priorité puis engagement total
-        influencers_table.sort(key=lambda x: (x['priority_score'], x['total_engagement']), reverse=True)
-        
-        # Analyse stratégique
-        high_risk_count = len([i for i in influencers_table if i['risk_level'] == 'ÉLEVÉ'])
-        major_influencers = len([i for i in influencers_table if any(tier in i['profile'] for tier in ['MAJEUR', 'CRITIQUE', 'POLITIQUE', 'JOURNALISTE'])])
-        
-        strategic_analysis = f"Écosystème de {len(influencers_table)} influenceurs identifiés dont {high_risk_count} à risque ÉLEVÉ et {major_influencers} de niveau stratégique. "
-        
-        if high_risk_count > 0:
-            strategic_analysis += f"⚠️ ALERTE: {high_risk_count} influenceur(s) critique(s) nécessitant intervention prioritaire. "
-        
-        strategic_analysis += "Leur capacité de mobilisation en fait des acteurs stratégiques dans la formation de l'opinion publique camerounaise."
-        
-        return {
-            'total_identified': len(influencers_table),
-            'high_risk_count': high_risk_count,
-            'major_count': major_influencers,
-            'analysis': strategic_analysis,
-            'influencers_table': influencers_table,
-            'strategic_context': f"Ces {len(influencers_table)} influenceurs représentent des relais d'opinion cruciaux. {high_risk_count} voix critiques à fort engagement peuvent amplifier dynamiques de contestation. Stratégie d'influence ciblée recommandée: engagement direct avec top 3, briefings privilégiés, contenus exclusifs."
-        }
-    
-    def _extract_themes(self, mentions: List, positive: Optional[bool] = None) -> List[str]:
-        """Extraire thématiques récurrentes"""
-        if positive is True:
-            keywords = ['progrès', 'développement', 'amélioration', 'succès', 'réussite',
-                       'bon', 'bien', 'excellent', 'transparence', 'crédible', 'compétent',
-                       'expérience', 'réforme', 'garantie', 'indépendance']
-        elif positive is False:
-            keywords = ['problème', 'inquiétude', 'doute', 'critique', 'scepticisme',
-                       'corruption', 'manque', 'absence', 'promesse', 'déjà entendu',
-                       'garantie', 'confiance', 'transparence', 'composition', 'indépendance']
-        else:
-            keywords = ['observation', 'question', 'information', 'date', 'calendrier',
-                       'modalité', 'processus', 'commission', 'électorale', 'scrutin']
-        
-        themes = []
-        all_text = ' '.join([m.title + ' ' + m.content for m in mentions]).lower()
-        
-        for keyword in keywords:
-            if keyword in all_text:
-                count = all_text.count(keyword)
-                if count >= 2:
-                    themes.append(f"{keyword.title()} ({count}×)")
-        
-        return sorted(themes, key=lambda x: int(x.split('(')[1].split('×')[0]), reverse=True)[:10]
-    
-    def _clean_text(self, text: str) -> str:
-        """Nettoyer texte pour verbatim"""
-        text = re.sub(r'\s+', ' ', text)
-        text = re.sub(r'http\S+', '', text)
-        text = text.strip()
-        return text[:250] + '...' if len(text) > 250 else text
 
-    def generate_cameroon_html_report(self, report_data: Dict) -> str:
-        """Générer rapport HTML ultra-optimisé pour 2 pages avec contenu dense (SANS RECOMMANDATIONS)"""
+    async def generate_intelligent_html_report(self, report_data: Dict) -> str:
+        """Générer le rapport HTML intelligent enrichi"""
         
-        # CSS ultra-optimisé pour maximiser contenu sur 2 pages
+        # CSS optimisé pour rapport intelligent
         html = f"""
         <!DOCTYPE html>
         <html>
@@ -769,213 +513,227 @@ class CameroonReportGenerator:
             <meta charset="UTF-8">
             <style>
                 @page {{ size: A4; margin: 0.8cm; }}
-                body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.3; font-size: 8.5pt; margin: 0; padding: 0; }}
-                .header {{ text-align: center; padding: 8px 0; border-bottom: 2px solid #667eea; margin-bottom: 10px; }}
-                .header h1 {{ color: #667eea; font-size: 16pt; margin: 0 0 3px 0; font-weight: 700; }}
-                .header .subtitle {{ color: #6b7280; font-size: 7.5pt; line-height: 1.2; }}
-                .section-title {{ color: #667eea; font-size: 10pt; font-weight: bold; margin: 8px 0 5px 0; padding-bottom: 3px; border-bottom: 1px solid #e5e7eb; }}
-                .risk-box {{ padding: 8px; border-radius: 6px; margin: 6px 0; border-left: 3px solid; }}
-                .risk-high {{ background: #fef2f2; border-color: #ef4444; }}
-                .risk-medium {{ background: #fffbeb; border-color: #f59e0b; }}
-                .risk-low {{ background: #f0fdf4; border-color: #10b981; }}
-                .metric-grid {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 6px 0; }}
-                .metric-card {{ background: #f9fafb; padding: 6px; border-radius: 4px; text-align: center; }}
-                .metric-value {{ font-size: 11pt; font-weight: bold; color: #667eea; }}
-                .metric-label {{ font-size: 6.5pt; color: #6b7280; margin-top: 2px; }}
-                .sentiment-section {{ background: #f9fafb; padding: 8px; margin: 6px 0; border-left: 3px solid; border-radius: 4px; }}
-                .sentiment-positive {{ border-color: #10b981; }}
-                .sentiment-negative {{ border-color: #ef4444; }}
-                .sentiment-neutral {{ border-color: #6b7280; }}
-                .verbatim {{ font-style: italic; background: #f8fafc; padding: 6px; border-left: 2px solid #cbd5e1; margin: 4px 0; font-size: 7.5pt; }}
-                .verbatim-priority {{ background: #fef3c7; border-left: 3px solid #f59e0b; }}
-                .tier-info {{ font-size: 6.5pt; font-weight: bold; color: #374151; }}
-                table {{ width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 7pt; }}
-                th {{ background: #667eea; color: white; padding: 4px 3px; text-align: left; font-weight: 600; font-size: 7pt; }}
-                td {{ padding: 4px 3px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }}
-                tr:nth-child(even) {{ background: #f9fafb; }}
-                .alert-high {{ background: #fef2f2; color: #b91c1c; }}
-                .alert-medium {{ background: #fffbeb; color: #92400e; }}
-                .alert-low {{ background: #f0fdf4; color: #065f46; }}
-                .two-col {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }}
-                .insight {{ background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 8px; border-radius: 6px; margin: 6px 0; font-size: 8pt; }}
-                .page-break {{ page-break-after: always; }}
-                strong {{ font-weight: 600; }}
-                p {{ margin: 3px 0; }}
-                ul {{ margin: 3px 0; padding-left: 15px; }}
-                li {{ margin: 2px 0; }}
+                body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.4; font-size: 9pt; margin: 0; padding: 0; }}
+                .header {{ text-align: center; padding: 8px 0; border-bottom: 3px solid #667eea; margin-bottom: 12px; }}
+                .header h1 {{ color: #667eea; font-size: 18pt; margin: 0 0 4px 0; font-weight: 700; }}
+                .header .subtitle {{ color: #6b7280; font-size: 8pt; line-height: 1.2; }}
+                .ai-badge {{ background: linear-gradient(45deg, #667eea, #764ba2); color: white; padding: 3px 8px; border-radius: 12px; font-size: 7pt; font-weight: bold; margin-left: 8px; }}
+                .section-title {{ color: #667eea; font-size: 11pt; font-weight: bold; margin: 10px 0 6px 0; padding-bottom: 3px; border-bottom: 1px solid #e5e7eb; }}
+                .ai-section {{ background: linear-gradient(135deg, #667eea15, #764ba205); border-left: 4px solid #667eea; padding: 10px; margin: 8px 0; border-radius: 6px; }}
+                .intelligence-metric {{ display: inline-block; background: #f3f4f6; padding: 4px 8px; border-radius: 6px; margin: 2px; font-size: 8pt; }}
+                .risk-assessment {{ padding: 12px; border-radius: 8px; margin: 8px 0; }}
+                .risk-critique {{ background: #fee2e2; border: 2px solid #dc2626; }}
+                .risk-eleve {{ background: #fef2f2; border: 2px solid #ef4444; }}
+                .risk-modere {{ background: #fef3c7; border: 2px solid #f59e0b; }}
+                .risk-faible {{ background: #f0fdf4; border: 2px solid #10b981; }}
+                .web-insight {{ background: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 8px; margin: 6px 0; }}
+                .recommendation {{ background: #fafafa; border-left: 3px solid #8b5cf6; padding: 8px; margin: 4px 0; }}
+                .recommendation.immediate {{ border-left-color: #ef4444; background: #fef2f2; }}
+                .recommendation.short-term {{ border-left-color: #f59e0b; background: #fffbeb; }}
+                .recommendation.long-term {{ border-left-color: #10b981; background: #f0fdf4; }}
+                .authenticity-indicator {{ display: flex; align-items: center; margin: 4px 0; }}
+                .authenticity-bar {{ width: 100px; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin: 0 8px; }}
+                .authenticity-fill {{ height: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981); }}
+                table {{ width: 100%; border-collapse: collapse; font-size: 8pt; margin: 6px 0; }}
+                th {{ background: #667eea; color: white; padding: 4px; text-align: left; }}
+                td {{ padding: 4px; border-bottom: 1px solid #e5e7eb; }}
+                .insight-box {{ background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px; border-radius: 4px; margin: 4px 0; font-size: 8pt; }}
             </style>
         </head>
         <body>
         
         <!-- En-tête -->
         <div class="header">
-            <h1>🇨🇲 RAPPORT D'ANALYSE - OPINION PUBLIQUE CAMEROUNAISE</h1>
+            <h1>🤖 RAPPORT INTELLIGENT - ANALYSE IA AVANCÉE</h1>
             <div class="subtitle">
-                <strong>{report_data['report_object']}</strong><br>
+                <strong>{report_data['report_object']}</strong>
+                <span class="ai-badge">IA SOUVERAINE</span><br>
                 Période: {report_data['period_days']} jours | Généré: {report_data['generated_at'].strftime('%d/%m/%Y %H:%M')}<br>
                 Mots-clés: {', '.join(report_data['keywords'])} | Total mentions: {report_data['total_mentions']}
+                {f" | Contenu web analysé: {report_data['web_content_analyzed']} sources" if report_data.get('web_content_analyzed', 0) > 0 else ""}
             </div>
         </div>
         """
         
-        # 1. Évaluation de gravité enrichie
+        # Synthèse exécutive IA
+        if 'ai_analysis' in report_data and 'executive_summary' in report_data['ai_analysis']:
+            executive = report_data['ai_analysis']['executive_summary']
+            priority_class = f"risk-{executive.get('priority_level', 'normal').lower()}"
+            confidence = executive.get('key_metrics', {}).get('analysis_confidence', 0.0)
+            
+            html += f"""
+            <div class="section-title">🧠 SYNTHÈSE EXÉCUTIVE IA</div>
+            <div class="ai-section {priority_class}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <strong style="font-size: 11pt;">NIVEAU DE PRIORITÉ: {executive.get('priority_level', 'NORMAL')}</strong>
+                    <div>
+                        <span style="font-size: 7pt;">Confiance IA: {confidence*100:.0f}%</span>
+                        <div style="display: inline-block; width: 40px; height: 6px; background: #e5e7eb; border-radius: 3px; margin-left: 5px; overflow: hidden;">
+                            <div style="width: {confidence*100}%; height: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981);"></div>
+                        </div>
+                    </div>
+                </div>
+                <p style="margin: 6px 0;"><strong>🎯 Analyse:</strong> {executive.get('summary', 'Analyse IA en cours...')}</p>
+                <p style="font-size: 8pt; margin: 4px 0; color: #4b5563;"><strong>📊 Statut:</strong> {executive.get('key_metrics', {}).get('alert_status', 'Normal')}</p>
+                {f"<p style='font-size: 8pt; margin: 4px 0; color: #4b5563;'><strong>🌐 Sources web analysées:</strong> {executive.get('key_metrics', {}).get('web_content_analyzed', 0)}</p>" if executive.get('key_metrics', {}).get('web_content_analyzed', 0) > 0 else ""}
+            </div>
+            """
+        
+        # Analyse intelligente
+        if 'smart_analysis' in report_data:
+            smart = report_data['smart_analysis']
+            html += f"""
+            <div class="section-title">🎯 ANALYSE INTELLIGENTE</div>
+            <div class="ai-section">
+                <p><strong>Résumé:</strong> {smart['summary']}</p>
+                <div style="margin: 8px 0;">
+                    <strong>Métriques d'intelligence:</strong>
+                    <div style="margin-top: 4px;">
+                        <span class="intelligence-metric">🚀 Viralité: {smart['intelligence_metrics']['virality_score']:.2f}</span>
+                        <span class="intelligence-metric">🌐 Diversité: {smart['intelligence_metrics']['diversity_score']:.2f}</span>
+                        <span class="intelligence-metric">📊 Engagement moy: {smart['intelligence_metrics']['avg_engagement']:.1f}</span>
+                        <span class="intelligence-metric">🤖 Confiance IA: {smart['intelligence_metrics']['ai_confidence']:.1%}</span>
+                    </div>
+                </div>
+                <div><strong>💡 Insights clés:</strong></div>
+                <ul style="margin: 4px 0; padding-left: 15px; font-size: 8pt;">
+                    {chr(10).join([f'<li>{insight}</li>' for insight in smart['key_insights'] if insight.strip()])}
+                </ul>
+                {f"<div class='web-insight'><strong>🌐 Contexte web:</strong> {smart.get('web_context', '')}</div>" if smart.get('web_context') else ""}
+            </div>
+            """
+        
+        # Évaluation de risque enrichie IA
         if 'risk_assessment' in report_data:
             risk = report_data['risk_assessment']
-            risk_class = 'risk-high' if risk['risk_level'] == 'ÉLEVÉ' else 'risk-medium' if risk['risk_level'] == 'MODÉRÉ' else 'risk-low'
+            risk_class = f"risk-{risk['risk_level'].lower().replace('é', 'e')}"
             
             html += f"""
-            <div class="section-title">🚨 ÉVALUATION DE GRAVITÉ</div>
-            <div class="risk-box {risk_class}">
-                <strong style="font-size: 11pt;">NIVEAU: {risk['risk_level']} ({risk['risk_score']}/100)</strong>
-                <p><strong>Signal:</strong> {risk['signal_principal']}</p>
-                <p><strong>Tendance:</strong> {risk['trend']} | <strong>Action:</strong> {risk['action_prioritaire']}</p>
-            </div>
-            
-            <div class="metric-grid">
-            """
-            
-            for factor_name, factor_data in risk['factors'].items():
-                html += f"""
-                <div class="metric-card">
-                    <div class="metric-value">{factor_data['score']}</div>
-                    <div class="metric-label">{factor_name.title()}<br>{factor_data['detail']}</div>
+            <div class="section-title">🚨 ÉVALUATION DE RISQUE IA</div>
+            <div class="risk-assessment {risk_class}">
+                <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 8px;">
+                    <strong style="font-size: 12pt;">NIVEAU: {risk['risk_level']} ({risk['risk_score']}/100)</strong>
+                    <span style="font-size: 8pt; margin-left: auto;">Confiance: {risk['confidence_level']:.1%}</span>
                 </div>
-                """
-            
-            html += f"""
-            </div>
-            
-            <div class="insight">
-                💡 <strong>Insight clé:</strong> {risk['insight']}
-            </div>
-            """
-            
-            # Évolution temporelle compacte
-            if risk.get('evolution'):
-                html += "<p style='font-size:7.5pt; margin:4px 0;'><strong>Évolution:</strong> "
-                for week in risk['evolution']:
-                    html += f"{week['week']}: {week['mentions']} mentions {week.get('trend', '')} | "
-                html += "</p>"
-        
-        # 2. Jugements positifs (compacté avec verbatims améliorés)
-        if 'positive_analysis' in report_data:
-            pos = report_data['positive_analysis']
-            html += f"""
-            <div class="section-title">😊 JUGEMENTS POSITIFS ({pos['count']} - {pos['percentage']}%)</div>
-            <div class="sentiment-section sentiment-positive">
-                <p><strong>Analyse:</strong> {pos['analysis']}</p>
-                <p><strong>Thèmes clés:</strong> {', '.join(pos['key_themes'][:5]) if pos['key_themes'] else 'N/A'}</p>
-            """
-            
-            if pos.get('verbatims'):
-                for v in pos['verbatims'][:2]:
-                    verbatim_class = 'verbatim-priority' if 'ACTIVISTE' in v.get('tier_info', '') or 'MÉDIA' in v.get('tier_info', '') else 'verbatim'
-                    html += f"""
-                    <div class="{verbatim_class}">
-                        <div class="tier-info">{v.get('tier_info', '')}</div>
-                        "{v['text']}" - <strong>{v['author']}</strong> ({v['source']}, {v['date']}) [{v['engagement']} eng.]
-                    </div>
-                    """
-            
-            html += f"<p style='font-size:7.5pt; margin-top:4px;'><strong>🎯 Contexte:</strong> {pos['strategic_context']}</p></div>"
-        
-        # 3. Jugements négatifs (compacté avec verbatims améliorés)
-        if 'negative_analysis' in report_data:
-            neg = report_data['negative_analysis']
-            html += f"""
-            <div class="section-title">😞 JUGEMENTS NÉGATIFS ({neg['count']} - {neg['percentage']}%)</div>
-            <div class="sentiment-section sentiment-negative">
-                <p><strong>Analyse:</strong> {neg['analysis']}</p>
-                <p><strong>Préoccupations:</strong> {', '.join(neg['key_concerns'][:5]) if neg['key_concerns'] else 'N/A'} | <strong>Risque viral:</strong> {neg.get('viral_risk', 'N/A')}</p>
-            """
-            
-            if neg.get('verbatims'):
-                for v in neg['verbatims'][:2]:
-                    verbatim_class = 'verbatim-priority' if 'ACTIVISTE' in v.get('tier_info', '') or 'MÉDIA' in v.get('tier_info', '') else 'verbatim'
-                    html += f"""
-                    <div class="{verbatim_class}">
-                        <div class="tier-info">{v.get('tier_info', '')} {v.get('alert_level', '')}</div>
-                        "{v['text']}" - <strong>{v['author']}</strong> ({v['source']}) [{v['engagement']} eng.]
-                    </div>
-                    """
-            
-            html += f"<p style='font-size:7.5pt; margin-top:4px;'><strong>⚠️ Contexte:</strong> {neg['strategic_context']}</p></div>"
-        
-        # 4. Jugements neutres (ultra-compacté)
-        if 'neutral_analysis' in report_data:
-            neu = report_data['neutral_analysis']
-            html += f"""
-            <div class="section-title">😐 JUGEMENTS NEUTRES ({neu['count']} - {neu['percentage']}%)</div>
-            <div class="sentiment-section sentiment-neutral">
-                <p>{neu['analysis']}</p>
-                <p><strong>Thèmes:</strong> {', '.join(neu['observation_themes'][:5]) if neu['observation_themes'] else 'N/A'}</p>
-                <p style='font-size:7.5pt;'><strong>💡 {neu['strategic_context']}</strong></p>
-            </div>
-            """
-        
-        # === SAUT DE PAGE ===
-        html += '<div class="page-break"></div>'
-        
-        # 5. Synthèse (début page 2)
-        if 'judgment_synthesis' in report_data:
-            synth = report_data['judgment_synthesis']
-            html += f"""
-            <div class="section-title">📊 SYNTHÈSE DES JUGEMENTS</div>
-            <div class="insight">
-                <strong>Tendance: {synth['dominant_trend']}</strong> | Ratio P/N: {synth.get('ratio_pos_neg', 'N/A')}<br>
-                {synth['strategic_assessment']}<br>
-                <strong>{synth.get('window_action', '')}</strong>
-            </div>
-            <p style='font-size:7.5pt; background:#f0f9ff; padding:5px; margin:4px 0; border-radius:4px;'>
-                <strong>📌 Recommandation:</strong> {synth['recommendation']}
-            </p>
-            """
-        
-        # 6. Influenceurs (compacté avec tableau dense et priorisation améliorée)
-        if 'engaged_influencers' in report_data:
-            inf = report_data['engaged_influencers']
-            html += f"""
-            <div class="section-title">👑 INFLUENCEURS ENGAGÉS ({inf['total_identified']})</div>
-            <p style='font-size:7.5pt; margin:4px 0;'>{inf['analysis']}</p>
-            
-            <table>
-                <tr>
-                    <th>Influenceur</th>
-                    <th>Profil</th>
-                    <th>Plateforme</th>
-                    <th>Mentions</th>
-                    <th>Engagement</th>
-                    <th>Portée</th>
-                    <th>Tendance</th>
-                    <th>Risque</th>
-                    <th>Action</th>
-                </tr>
-            """
-            
-            # Limiter à 8 influenceurs les plus prioritaires
-            for influencer in inf['influencers_table'][:8]:
-                risk_class = 'alert-high' if influencer['risk_level'] == 'ÉLEVÉ' else 'alert-medium' if influencer['risk_level'] == 'Modéré' else 'alert-low'
+                <p style="margin: 6px 0;"><strong>🤖 Évaluation IA:</strong> {risk['ai_assessment']}</p>
+                <p style="font-size: 8pt; margin: 4px 0;"><strong>📈 Statut d'alerte:</strong> {risk['alert_status']}</p>
                 
-                html += f"""
-                    <tr class="{risk_class}">
-                        <td><strong>{influencer['name'][:30]}</strong></td>
-                        <td style="font-size:6.5pt;">{influencer['profile']}</td>
-                        <td>{influencer['platform']}</td>
-                        <td>{influencer['mentions_count']}</td>
-                        <td>{influencer['total_engagement']:,}</td>
-                        <td style="font-size:6.5pt;">{influencer['estimated_reach']}</td>
-                        <td>{influencer['sentiment_tendency']}</td>
-                        <td><strong>{influencer['risk_level']}</strong></td>
-                        <td style='font-size:6pt;'>{influencer['action_recommended']}</td>
-                    </tr>
-                """
-            
-            html += f"</table><p style='font-size:7.5pt; margin:4px 0;'><strong>🎯 Contexte:</strong> {inf['strategic_context']}</p>"
+                <div style="margin-top: 8px;">
+                    <strong style="font-size: 9pt;">Facteurs contributifs:</strong>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 4px; font-size: 7pt;">
+                        <div>Volume: {risk['contributing_factors']['volume']}</div>
+                        <div>Sentiment: {risk['contributing_factors']['sentiment']}</div>
+                        <div>Engagement: {risk['contributing_factors']['engagement']}</div>
+                        <div>IA Intelligence: {risk['contributing_factors']['ai_intelligence']}</div>
+                        <div>Authenticité: {risk['contributing_factors']['authenticity_concern']}</div>
+                    </div>
+                </div>
+            </div>
+            """
         
-        # Footer
+        # Évaluation d'authenticité
+        if 'authenticity_assessment' in report_data:
+            auth = report_data['authenticity_assessment']
+            html += f"""
+            <div class="section-title">🔍 ÉVALUATION D'AUTHENTICITÉ</div>
+            <div class="ai-section">
+                <div class="authenticity-indicator">
+                    <strong>{auth['authenticity_level']}</strong>
+                    <div class="authenticity-bar">
+                        <div class="authenticity-fill" style="width: {auth['authenticity_score']*100}%;"></div>
+                    </div>
+                    <span>{auth['authenticity_score']}/1.0</span>
+                    <span style="margin-left: 8px; font-size: 7pt; color: {auth['color']};">●</span>
+                </div>
+                
+                <div style="margin: 6px 0;">
+                    <strong>Indicateurs positifs:</strong>
+                    <ul style="margin: 2px 0; padding-left: 15px; font-size: 8pt;">
+                        {chr(10).join([f'<li>{indicator}</li>' for indicator in auth['indicators']])}
+                    </ul>
+                </div>
+                
+                {f"<div style='margin: 6px 0;'><strong>🚩 Signaux d'alarme:</strong><ul style='margin: 2px 0; padding-left: 15px; font-size: 8pt;'>{chr(10).join([f'<li style=\"color: #ef4444;\">{flag}</li>' for flag in auth['red_flags']])}</ul></div>" if auth.get('red_flags') else ""}
+                
+                <p style="font-size: 7pt; margin: 4px 0; color: #6b7280;">Confiance de l'évaluation: {auth['confidence']}</p>
+            </div>
+            """
+        
+        # Insights web spécifiques
+        if 'web_insights' in report_data and report_data['web_insights'].get('available'):
+            web = report_data['web_insights']
+            html += f"""
+            <div class="section-title">🌐 ANALYSE CONTENU WEB</div>
+            <div class="web-insight">
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; font-size: 8pt;">
+                    <div><strong>{web['articles_analyzed']}</strong><br>Articles analysés</div>
+                    <div><strong>{web['total_comments']}</strong><br>Commentaires extraits</div>
+                    <div><strong>{web['unique_commentators']}</strong><br>Commentateurs uniques</div>
+                    <div><strong>{web['authenticity_assessment']:.1f}/1.0</strong><br>Score authenticité</div>
+                </div>
+                
+                <div><strong>🔍 Résultats clés:</strong></div>
+                <ul style="margin: 4px 0; padding-left: 15px; font-size: 8pt;">
+                    {chr(10).join([f'<li>{finding}</li>' for finding in web['key_findings']])}
+                </ul>
+                
+                {f"<div style='margin-top: 6px;'><strong>💬 Commentaire le plus engageant:</strong><br><em style='font-size: 7pt;'>\"{web['most_engaged_comment']['text'][:100]}...\" - {web['most_engaged_comment']['author']} ({web['most_engaged_comment']['likes']} likes)</em></div>" if web.get('most_engaged_comment') else ""}
+            </div>
+            """
+        
+        # Patterns d'engagement intelligents
+        if 'engagement_insights' in report_data:
+            engagement = report_data['engagement_insights']
+            html += f"""
+            <div class="section-title">📊 PATTERNS D'ENGAGEMENT IA</div>
+            <div class="ai-section">
+                <p><strong>Pattern détecté:</strong> {engagement['pattern']}</p>
+                
+                <div style="margin: 6px 0;">
+                    <strong>Indicateurs d'authenticité:</strong>
+                    <span class="intelligence-metric">🌐 Authenticité web: {engagement['authenticity_indicators']['web_authenticity']:.1f}</span>
+                    <span class="intelligence-metric">💬 Qualité commentaires: {engagement['authenticity_indicators']['comment_quality']}</span>
+                </div>
+                
+                <div><strong>💡 Insights:</strong></div>
+                <ul style="margin: 4px 0; padding-left: 15px; font-size: 8pt;">
+                    {chr(10).join([f'<li>{insight}</li>' for insight in engagement['insights']])}
+                </ul>
+            </div>
+            """
+        
+        # Recommandations actionnables
+        if 'actionable_recommendations' in report_data:
+            recs = report_data['actionable_recommendations']
+            html += f"""
+            <div class="section-title">🎯 RECOMMANDATIONS ACTIONNABLES IA</div>
+            """
+            
+            for priority, actions in recs.items():
+                if actions:
+                    priority_labels = {
+                        'immediate': '🚨 ACTIONS IMMÉDIATES',
+                        'short_term': '⚡ COURT TERME',
+                        'long_term': '🎯 LONG TERME'
+                    }
+                    
+                    html += f"<div style='margin: 8px 0;'><strong>{priority_labels.get(priority, priority.upper())}</strong></div>"
+                    
+                    for action in actions:
+                        deadline_key = 'deadline' if 'deadline' in action else 'timeline'
+                        html += f"""
+                        <div class="recommendation {priority}">
+                            <strong>{action['action']}</strong><br>
+                            <span style="font-size: 8pt;">{action['reason']}</span><br>
+                            <span style="font-size: 7pt; color: #6b7280;">⏰ {action.get(deadline_key, 'Non spécifié')}</span>
+                        </div>
+                        """
+        
+        # Footer avec info IA
         html += """
-            <div style="margin-top:10px; padding-top:6px; border-top:1px solid #e5e7eb; text-align:center; font-size:6.5pt; color:#9ca3af;">
-                Rapport généré par Superviseur MINDEF | Confidentiel - Usage interne uniquement | République du Cameroun
+            <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 7pt; color: #9ca3af;">
+                <p>🤖 Rapport généré avec Intelligence Artificielle Souveraine • Agents IA Spécialisés • Analyse Web Avancée</p>
+                <p style="margin-top: 4px;">🧠 Sentiment • 📈 Tendances • 👑 Influenceurs • 🌐 Contenu Web • 🔍 Authenticité</p>
             </div>
         </body>
         </html>
@@ -983,17 +741,17 @@ class CameroonReportGenerator:
         
         return html
 
-    def generate_cameroon_pdf(self, report_data: Dict) -> bytes:
-        """Générer le PDF du rapport enrichi"""
+    async def generate_intelligent_pdf(self, report_data: Dict) -> bytes:
+        """Générer le PDF du rapport intelligent"""
         try:
             from weasyprint import HTML
             
-            html_content = self.generate_cameroon_html_report(report_data)
+            html_content = await self.generate_intelligent_html_report(report_data)
             pdf_bytes = HTML(string=html_content).write_pdf()
             
             return pdf_bytes
             
         except ImportError:
             logger.warning("WeasyPrint not available, generating HTML only")
-            html_content = self.generate_cameroon_html_report(report_data)
+            html_content = await self.generate_intelligent_html_report(report_data)
             return html_content.encode('utf-8')
