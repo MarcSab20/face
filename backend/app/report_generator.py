@@ -1,7 +1,8 @@
 """
 Générateur de rapports enrichi spécialisé pour le contexte camerounais
 Version améliorée avec intelligence analytique avancée
-Structuré en 6 sections sur 2 pages avec contenu dense et stratégique
+Structuré en 5 sections sur 2 pages avec contenu dense et stratégique
+AMÉLIORATIONS: Suppression recommandations + Sélection verbatims optimisée
 """
 
 import logging
@@ -19,22 +20,35 @@ logger = logging.getLogger(__name__)
 class CameroonReportGenerator:
     """Générateur de rapports enrichi avec analyse stratégique avancée"""
     
-    # Liste des influenceurs camerounais à surveiller
+    # Liste des influenceurs camerounais à surveiller (élargie et priorisée)
     CAMEROON_INFLUENCERS = [
+        # Tier 1 - Activistes politiques majeurs
+        "Maurice Kamto", "Kah Walla", "Patrice Nganang", "Ernest Obama",
+        "Cabral Libii", "Joshua Osih", "Célestin Djamen", "Paul Éric Kingué",
+        
+        # Tier 2 - Journalistes et médias influents  
+        "Ahmed Abba", "Mimi Mefo", "Talk with Mimi Mefo", "Cameroon News Agency",
+        "Brice Nitcheu", "Michel Biem Tong", "Christian Penda Ekoka",
+        "Claude Wilfried Ekanga", "Armand Okol", "Fabrice Lena",
+        
+        # Tier 3 - Influenceurs numériques et culturels
         "N'zui Manto", "Brigade anti-sardinards", "Boris Bertolt", "Angie Forbin",
-        "Abdoulaye Thiam", "Ahmed Abba", "Cameroon News Agency", "Brice Nitcheu",
-        "MbangaMan237", "Sandy Boston Officiel 3", "Mbong Mendzui officiel",
-        "Patrice Nouma", "Richard Bona", "Paul Chouta", "Mimi Mefo",
-        "Talk with Mimi Mefo", "Général Valsero", "Jaques Bertrand mang", 
-        "Michelle ngatchou", "AfroBrains Cameroon-ABC", "Infolage", 
-        "Mc-Kenzo-officiel", "Lepierro Lemonstre", "James Bardock Bardock", 
-        "Fernandtech TV", "Maurice Kamto", "Kah Walla", "Valsero", "Brenda Biya",
-        "Calibri Calibro", "Patrice Nganang", "Wilfried Ekanga",
-        "Abdouraman Hamadou", "Ernest Obama", "Christian Penda Ekoka",
-        "Fabrice Lena", "Michel Biem Tong", "Armand Okol",
-        "Claude Wilfried Ekanga", "Paul Éric Kingué", "Célestin Djamen",
-        "C'est le hoohaaa"
+        "Abdoulaye Thiam", "MbangaMan237", "Sandy Boston Officiel 3", 
+        "Mbong Mendzui officiel", "Patrice Nouma", "Richard Bona", "Paul Chouta",
+        "Jaques Bertrand mang", "Michelle ngatchou", "AfroBrains Cameroon-ABC", 
+        "Infolage", "Mc-Kenzo-officiel", "Lepierro Lemonstre", "James Bardock Bardock", 
+        "Fernandtech TV", "Brenda Biya", "Calibri Calibro", "Wilfried Ekanga",
+        "Abdouraman Hamadou", "C'est le hoohaaa", "Général Valsero", "Valsero"
     ]
+    
+    # Classification des influenceurs par tier (pour priorité verbatims)
+    INFLUENCER_TIERS = {
+        'tier_1': ["Maurice Kamto", "Kah Walla", "Patrice Nganang", "Ernest Obama",
+                   "Cabral Libii", "Joshua Osih", "Célestin Djamen", "Paul Éric Kingué"],
+        'tier_2': ["Ahmed Abba", "Mimi Mefo", "Talk with Mimi Mefo", "Cameroon News Agency",
+                   "Brice Nitcheu", "Michel Biem Tong", "Christian Penda Ekoka"],
+        'tier_3': ["N'zui Manto", "Brigade anti-sardinards", "Boris Bertolt", "Angie Forbin"]
+    }
     
     def __init__(self, db: Session):
         self.db = db
@@ -45,7 +59,7 @@ class CameroonReportGenerator:
         days: int = 30,
         report_object: str = ""
     ) -> Dict:
-        """Générer un rapport enrichi ultra-détaillé avec structure en 6 sections"""
+        """Générer un rapport enrichi ultra-détaillé avec structure en 5 sections (sans recommandations)"""
         from app.models import Keyword, Mention
         
         keywords = self.db.query(Keyword).filter(Keyword.id.in_(keyword_ids)).all()
@@ -91,9 +105,113 @@ class CameroonReportGenerator:
             positive_mentions, negative_mentions, neutral_mentions, mentions, days
         )
         report_data['engaged_influencers'] = self._analyze_engaged_influencers_enriched(targeted_mentions, mentions)
-        report_data['recommendations'] = self._generate_strategic_recommendations(report_data)
         
         return report_data
+    
+    def _get_prioritized_verbatims(self, mentions: List, sentiment_type: str, max_count: int = 3) -> List[Dict]:
+        """
+        Sélectionner les verbatims les plus pertinents en priorisant les activistes connus
+        
+        Args:
+            mentions: Liste des mentions à analyser
+            sentiment_type: 'positive', 'negative', ou 'neutral'
+            max_count: Nombre maximum de verbatims à retourner
+            
+        Returns:
+            Liste des verbatims sélectionnés avec priorité aux activistes
+        """
+        if not mentions:
+            return []
+        
+        # Classifier les mentions par priorité
+        tier_1_mentions = []
+        tier_2_mentions = []
+        tier_3_mentions = []
+        other_mentions = []
+        
+        for mention in mentions:
+            author_lower = mention.author.lower()
+            
+            # Vérifier chaque tier
+            if any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_1']):
+                tier_1_mentions.append(mention)
+            elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_2']):
+                tier_2_mentions.append(mention)
+            elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_3']):
+                tier_3_mentions.append(mention)
+            else:
+                other_mentions.append(mention)
+        
+        # Trier chaque groupe par engagement décroissant
+        tier_1_mentions.sort(key=lambda m: m.engagement_score, reverse=True)
+        tier_2_mentions.sort(key=lambda m: m.engagement_score, reverse=True)
+        tier_3_mentions.sort(key=lambda m: m.engagement_score, reverse=True)
+        other_mentions.sort(key=lambda m: m.engagement_score, reverse=True)
+        
+        # Sélection intelligente avec priorité
+        selected_mentions = []
+        
+        # Prendre d'abord les tier 1 (au moins 1 si disponible)
+        if tier_1_mentions and len(selected_mentions) < max_count:
+            selected_mentions.extend(tier_1_mentions[:min(2, max_count)])
+        
+        # Compléter avec tier 2
+        if tier_2_mentions and len(selected_mentions) < max_count:
+            remaining = max_count - len(selected_mentions)
+            selected_mentions.extend(tier_2_mentions[:remaining])
+        
+        # Compléter avec tier 3 si nécessaire
+        if tier_3_mentions and len(selected_mentions) < max_count:
+            remaining = max_count - len(selected_mentions)
+            selected_mentions.extend(tier_3_mentions[:remaining])
+        
+        # En dernier recours, prendre les autres avec le plus d'engagement
+        if len(selected_mentions) < max_count and other_mentions:
+            remaining = max_count - len(selected_mentions)
+            selected_mentions.extend(other_mentions[:remaining])
+        
+        # Convertir en format verbatim
+        verbatims = []
+        for mention in selected_mentions:
+            # Déterminer le tier pour annotation
+            tier_info = ""
+            author_lower = mention.author.lower()
+            
+            if any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_1']):
+                tier_info = "🔴 ACTIVISTE MAJEUR"
+            elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_2']):
+                tier_info = "🟡 MÉDIA INFLUENT"
+            elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_3']):
+                tier_info = "🟠 INFLUENCEUR"
+            else:
+                tier_info = "⚫ CITOYEN"
+            
+            verbatims.append({
+                'text': self._clean_text(mention.content[:200]),
+                'author': mention.author,
+                'source': mention.source,
+                'date': mention.published_at.strftime('%d/%m/%Y') if mention.published_at else 'N/A',
+                'engagement': int(mention.engagement_score),
+                'tier_info': tier_info,
+                'priority_score': self._calculate_priority_score(mention)
+            })
+        
+        return verbatims
+    
+    def _calculate_priority_score(self, mention) -> int:
+        """Calculer un score de priorité pour un mention"""
+        score = mention.engagement_score
+        
+        # Bonus selon le tier de l'influenceur
+        author_lower = mention.author.lower()
+        if any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_1']):
+            score += 10000  # Gros bonus pour tier 1
+        elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_2']):
+            score += 5000   # Bonus moyen pour tier 2
+        elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_3']):
+            score += 2000   # Petit bonus pour tier 3
+        
+        return int(score)
     
     def _generate_enriched_risk_assessment(self, mentions: List, days: int) -> Dict:
         """Évaluation enrichie avec évolution temporelle, insights et métriques détaillées"""
@@ -294,7 +412,7 @@ class CameroonReportGenerator:
             return "→"
     
     def _analyze_positive_sentiment_enriched(self, positive_mentions: List, all_mentions: List) -> Dict:
-        """Analyse enrichie des jugements positifs avec verbatims et contexte stratégique"""
+        """Analyse enrichie des jugements positifs avec verbatims priorisés et contexte stratégique"""
         if not positive_mentions:
             return {
                 'count': 0,
@@ -311,22 +429,8 @@ class CameroonReportGenerator:
         # Extraction thèmes positifs
         themes = self._extract_themes(positive_mentions, positive=True)
         
-        # Verbatims représentatifs (TOP 3)
-        top_verbatims = sorted(
-            positive_mentions, 
-            key=lambda m: m.engagement_score, 
-            reverse=True
-        )[:3]
-        
-        verbatims = []
-        for mention in top_verbatims:
-            verbatims.append({
-                'text': self._clean_text(mention.content[:200]),
-                'author': mention.author,
-                'source': mention.source,
-                'date': mention.published_at.strftime('%d/%m/%Y') if mention.published_at else 'N/A',
-                'engagement': int(mention.engagement_score)
-            })
+        # Verbatims représentatifs avec priorité aux activistes (AMÉLIORÉ)
+        verbatims = self._get_prioritized_verbatims(positive_mentions, 'positive', max_count=3)
         
         return {
             'count': len(positive_mentions),
@@ -334,7 +438,7 @@ class CameroonReportGenerator:
             'analysis': f"L'analyse révèle {len(positive_mentions)} mentions à connotation positive ({percentage:.1f}% du total), témoignant d'une réception favorable sur certains aspects clés. Ces réactions constituent un capital de confiance précieux qu'il convient de consolider et d'amplifier stratégiquement.",
             'key_themes': themes[:5],
             'verbatims': verbatims,
-            'strategic_context': f"Ces {len(positive_mentions)} voix favorables reflètent l'efficacité de certains messages institutionnels. Amplifier ces narratifs via les influenceurs positifs (Mbong Mendzui type) pour élargir la base de soutien."
+            'strategic_context': f"Ces {len(positive_mentions)} voix favorables reflètent l'efficacité de certains messages institutionnels. Amplifier ces narratifs via les influenceurs positifs pour élargir la base de soutien."
         }
     
     def _analyze_negative_sentiment_enriched(self, negative_mentions: List, all_mentions: List) -> Dict:
@@ -355,23 +459,17 @@ class CameroonReportGenerator:
         # Extraction préoccupations
         concerns = self._extract_themes(negative_mentions, positive=False)
         
-        # Verbatims critiques représentatifs (TOP 3 par engagement)
-        top_verbatims = sorted(
-            negative_mentions,
-            key=lambda m: m.engagement_score,
-            reverse=True
-        )[:3]
+        # Verbatims critiques représentatifs avec priorité aux activistes (AMÉLIORÉ)
+        verbatims = self._get_prioritized_verbatims(negative_mentions, 'negative', max_count=3)
         
-        verbatims = []
-        for mention in top_verbatims:
-            verbatims.append({
-                'text': self._clean_text(mention.content[:200]),
-                'author': mention.author,
-                'source': mention.source,
-                'date': mention.published_at.strftime('%d/%m/%Y') if mention.published_at else 'N/A',
-                'engagement': int(mention.engagement_score),
-                'alert_level': '🔴 ÉLEVÉ' if mention.engagement_score > 1000 else '🟡 MODÉRÉ'
-            })
+        # Ajouter niveau d'alerte pour chaque verbatim
+        for verbatim in verbatims:
+            if verbatim['engagement'] > 1000:
+                verbatim['alert_level'] = '🔴 ÉLEVÉ'
+            elif verbatim['engagement'] > 500:
+                verbatim['alert_level'] = '🟡 MODÉRÉ'
+            else:
+                verbatim['alert_level'] = '🟢 FAIBLE'
         
         # Risque de viralisation
         high_engagement_negative = [m for m in negative_mentions if m.engagement_score > 500]
@@ -428,7 +526,7 @@ class CameroonReportGenerator:
         all_mentions: List,
         days: int
     ) -> Dict:
-        """Synthèse stratégique enrichie avec comparatif et recommandations"""
+        """Synthèse stratégique enrichie avec comparatif"""
         total = len(positive) + len(negative) + len(neutral)
         
         if total == 0:
@@ -571,15 +669,22 @@ class CameroonReportGenerator:
             else:
                 estimated_reach = "📉 Limitée (<1K)"
             
-            # Profil et recommandations
-            if risk_level == "ÉLEVÉ":
-                profile = "PRIORITÉ CRITIQUE"
+            # Profil et recommandations avec classification par tier
+            author_lower = author.lower()
+            if any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_1']):
+                profile = "🔴 ACTIVISTE POLITIQUE MAJEUR"
+                action = "Contact direct Présidence/PM sous 24h"
+            elif any(inf.lower() in author_lower for inf in self.INFLUENCER_TIERS['tier_2']):
+                profile = "🟡 JOURNALISTE/MÉDIA INFLUENT"
+                action = "Interview exclusive ou briefing privilégié"
+            elif risk_level == "ÉLEVÉ":
+                profile = "🟠 INFLUENCEUR À RISQUE CRITIQUE"
                 action = "Engagement direct requis sous 48h"
             elif avg_engagement > 10000:
-                profile = "INFLUENCEUR MAJEUR"
-                action = "Interview exclusive ou briefing privilégié"
+                profile = "🟢 INFLUENCEUR MAJEUR"
+                action = "Dialogue constructif recommandé"
             else:
-                profile = "Influenceur Standard"
+                profile = "⚫ Influenceur Standard"
                 action = "Surveillance continue"
             
             influencers_table.append({
@@ -594,17 +699,18 @@ class CameroonReportGenerator:
                 'risk_color': risk_color,
                 'estimated_reach': estimated_reach,
                 'last_activity': max([m.published_at for m in data['mentions'] if m.published_at]).strftime('%d/%m/%Y'),
-                'action_recommended': action
+                'action_recommended': action,
+                'priority_score': self._calculate_priority_score(data['mentions'][0]) if data['mentions'] else 0
             })
         
-        # Trier par engagement total
-        influencers_table.sort(key=lambda x: x['total_engagement'], reverse=True)
+        # Trier par score de priorité puis engagement total
+        influencers_table.sort(key=lambda x: (x['priority_score'], x['total_engagement']), reverse=True)
         
         # Analyse stratégique
         high_risk_count = len([i for i in influencers_table if i['risk_level'] == 'ÉLEVÉ'])
-        major_influencers = len([i for i in influencers_table if 'MAJEUR' in i['profile'] or 'CRITIQUE' in i['profile']])
+        major_influencers = len([i for i in influencers_table if any(tier in i['profile'] for tier in ['MAJEUR', 'CRITIQUE', 'POLITIQUE', 'JOURNALISTE'])])
         
-        strategic_analysis = f"Écosystème de {len(influencers_table)} influenceurs identifiés dont {high_risk_count} à risque ÉLEVÉ et {major_influencers} majeurs. "
+        strategic_analysis = f"Écosystème de {len(influencers_table)} influenceurs identifiés dont {high_risk_count} à risque ÉLEVÉ et {major_influencers} de niveau stratégique. "
         
         if high_risk_count > 0:
             strategic_analysis += f"⚠️ ALERTE: {high_risk_count} influenceur(s) critique(s) nécessitant intervention prioritaire. "
@@ -619,76 +725,6 @@ class CameroonReportGenerator:
             'influencers_table': influencers_table,
             'strategic_context': f"Ces {len(influencers_table)} influenceurs représentent des relais d'opinion cruciaux. {high_risk_count} voix critiques à fort engagement peuvent amplifier dynamiques de contestation. Stratégie d'influence ciblée recommandée: engagement direct avec top 3, briefings privilégiés, contenus exclusifs."
         }
-    
-    def _generate_strategic_recommendations(self, report_data: Dict) -> Dict:
-        """Générer recommandations opérationnelles actionnables par priorité"""
-        risk = report_data.get('risk_assessment', {})
-        synthesis = report_data.get('judgment_synthesis', {})
-        influencers = report_data.get('engaged_influencers', {})
-        
-        recommendations = {
-            'priority_1': [],
-            'priority_2': [],
-            'priority_3': []
-        }
-        
-        # Priorité 1: Urgence (0-48h)
-        if risk.get('risk_level') == 'ÉLEVÉ':
-            recommendations['priority_1'].append({
-                'title': '🚨 Activation cellule de crise',
-                'action': 'Réunion d\'urgence état-major + identification porte-parole',
-                'deadline': '24h',
-                'impact': 'Coordination réponse stratégique'
-            })
-        
-        if influencers.get('high_risk_count', 0) > 0:
-            recommendations['priority_1'].append({
-                'title': '👑 Engagement influenceurs critiques',
-                'action': f"Contact direct avec les {influencers['high_risk_count']} influenceurs à risque ÉLEVÉ - proposition interview/briefing",
-                'deadline': '48h',
-                'impact': 'Neutraliser narratifs négatifs à la source'
-            })
-        
-        neutral_pct = synthesis.get('distribution', {}).get('neutral', {}).get('percentage', 0)
-        if neutral_pct > 50:
-            recommendations['priority_1'].append({
-                'title': '📢 Campagne de transparence',
-                'action': 'Publication calendrier électoral détaillé + mécanismes de contrôle + FAQ',
-                'deadline': '7 jours',
-                'impact': f'Conversion potentielle de 40-60% des {neutral_pct:.0f}% neutres'
-            })
-        
-        # Priorité 2: Court terme (7-14 jours)
-        recommendations['priority_2'].append({
-            'title': '📺 Série contenus éducatifs',
-            'action': '10 vidéos courtes (2-3min) processus électoral + distribution via influenceurs positifs',
-            'deadline': '14 jours',
-            'impact': 'Pédagogie de masse + confiance'
-        })
-        
-        recommendations['priority_2'].append({
-            'title': '🤝 Partenariat observateurs internationaux',
-            'action': 'Invitation publique Union Africaine, CEMAC, UE + communiqué conjoint',
-            'deadline': '14 jours',
-            'impact': 'Signal fort de transparence + légitimité'
-        })
-        
-        # Priorité 3: Moyen terme (14-30 jours)
-        recommendations['priority_3'].append({
-            'title': '🔍 Dashboard monitoring temps réel',
-            'action': 'Déploiement outils avec alertes automatiques + rapports hebdomadaires',
-            'deadline': '21 jours',
-            'impact': 'Détection précoce + réactivité'
-        })
-        
-        recommendations['priority_3'].append({
-            'title': '📊 Fact-checking proactif',
-            'action': 'Équipe dédiée (2 personnes) + réponses factuelles sous 2h',
-            'deadline': '30 jours',
-            'impact': 'Combat désinformation + crédibilité'
-        })
-        
-        return recommendations
     
     def _extract_themes(self, mentions: List, positive: Optional[bool] = None) -> List[str]:
         """Extraire thématiques récurrentes"""
@@ -723,7 +759,7 @@ class CameroonReportGenerator:
         return text[:250] + '...' if len(text) > 250 else text
 
     def generate_cameroon_html_report(self, report_data: Dict) -> str:
-        """Générer rapport HTML ultra-optimisé pour 2 pages avec contenu dense"""
+        """Générer rapport HTML ultra-optimisé pour 2 pages avec contenu dense (SANS RECOMMANDATIONS)"""
         
         # CSS ultra-optimisé pour maximiser contenu sur 2 pages
         html = f"""
@@ -751,6 +787,8 @@ class CameroonReportGenerator:
                 .sentiment-negative {{ border-color: #ef4444; }}
                 .sentiment-neutral {{ border-color: #6b7280; }}
                 .verbatim {{ font-style: italic; background: #f8fafc; padding: 6px; border-left: 2px solid #cbd5e1; margin: 4px 0; font-size: 7.5pt; }}
+                .verbatim-priority {{ background: #fef3c7; border-left: 3px solid #f59e0b; }}
+                .tier-info {{ font-size: 6.5pt; font-weight: bold; color: #374151; }}
                 table {{ width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 7pt; }}
                 th {{ background: #667eea; color: white; padding: 4px 3px; text-align: left; font-weight: 600; font-size: 7pt; }}
                 td {{ padding: 4px 3px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }}
@@ -760,7 +798,6 @@ class CameroonReportGenerator:
                 .alert-low {{ background: #f0fdf4; color: #065f46; }}
                 .two-col {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }}
                 .insight {{ background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 8px; border-radius: 6px; margin: 6px 0; font-size: 8pt; }}
-                .rec-box {{ background: #eff6ff; border-left: 3px solid #3b82f6; padding: 6px; margin: 4px 0; font-size: 7.5pt; }}
                 .page-break {{ page-break-after: always; }}
                 strong {{ font-weight: 600; }}
                 p {{ margin: 3px 0; }}
@@ -820,7 +857,7 @@ class CameroonReportGenerator:
                     html += f"{week['week']}: {week['mentions']} mentions {week.get('trend', '')} | "
                 html += "</p>"
         
-        # 2. Jugements positifs (compacté)
+        # 2. Jugements positifs (compacté avec verbatims améliorés)
         if 'positive_analysis' in report_data:
             pos = report_data['positive_analysis']
             html += f"""
@@ -832,13 +869,17 @@ class CameroonReportGenerator:
             
             if pos.get('verbatims'):
                 for v in pos['verbatims'][:2]:
+                    verbatim_class = 'verbatim-priority' if 'ACTIVISTE' in v.get('tier_info', '') or 'MÉDIA' in v.get('tier_info', '') else 'verbatim'
                     html += f"""
-                    <div class="verbatim">"{v['text']}" - <strong>{v['author']}</strong> ({v['source']}, {v['date']}) [{v['engagement']} eng.]</div>
+                    <div class="{verbatim_class}">
+                        <div class="tier-info">{v.get('tier_info', '')}</div>
+                        "{v['text']}" - <strong>{v['author']}</strong> ({v['source']}, {v['date']}) [{v['engagement']} eng.]
+                    </div>
                     """
             
             html += f"<p style='font-size:7.5pt; margin-top:4px;'><strong>🎯 Contexte:</strong> {pos['strategic_context']}</p></div>"
         
-        # 3. Jugements négatifs (compacté)
+        # 3. Jugements négatifs (compacté avec verbatims améliorés)
         if 'negative_analysis' in report_data:
             neg = report_data['negative_analysis']
             html += f"""
@@ -850,8 +891,12 @@ class CameroonReportGenerator:
             
             if neg.get('verbatims'):
                 for v in neg['verbatims'][:2]:
+                    verbatim_class = 'verbatim-priority' if 'ACTIVISTE' in v.get('tier_info', '') or 'MÉDIA' in v.get('tier_info', '') else 'verbatim'
                     html += f"""
-                    <div class="verbatim">{v['alert_level']} "{v['text']}" - <strong>{v['author']}</strong> ({v['source']}) [{v['engagement']} eng.]</div>
+                    <div class="{verbatim_class}">
+                        <div class="tier-info">{v.get('tier_info', '')} {v.get('alert_level', '')}</div>
+                        "{v['text']}" - <strong>{v['author']}</strong> ({v['source']}) [{v['engagement']} eng.]
+                    </div>
                     """
             
             html += f"<p style='font-size:7.5pt; margin-top:4px;'><strong>⚠️ Contexte:</strong> {neg['strategic_context']}</p></div>"
@@ -886,7 +931,7 @@ class CameroonReportGenerator:
             </p>
             """
         
-        # 6. Influenceurs (compacté avec tableau dense)
+        # 6. Influenceurs (compacté avec tableau dense et priorisation améliorée)
         if 'engaged_influencers' in report_data:
             inf = report_data['engaged_influencers']
             html += f"""
@@ -907,49 +952,25 @@ class CameroonReportGenerator:
                 </tr>
             """
             
+            # Limiter à 8 influenceurs les plus prioritaires
             for influencer in inf['influencers_table'][:8]:
                 risk_class = 'alert-high' if influencer['risk_level'] == 'ÉLEVÉ' else 'alert-medium' if influencer['risk_level'] == 'Modéré' else 'alert-low'
                 
                 html += f"""
                     <tr class="{risk_class}">
                         <td><strong>{influencer['name'][:30]}</strong></td>
-                        <td>{influencer['profile']}</td>
+                        <td style="font-size:6.5pt;">{influencer['profile']}</td>
                         <td>{influencer['platform']}</td>
                         <td>{influencer['mentions_count']}</td>
                         <td>{influencer['total_engagement']:,}</td>
-                        <td>{influencer['estimated_reach']}</td>
+                        <td style="font-size:6.5pt;">{influencer['estimated_reach']}</td>
                         <td>{influencer['sentiment_tendency']}</td>
                         <td><strong>{influencer['risk_level']}</strong></td>
-                        <td style='font-size:6.5pt;'>{influencer['action_recommended']}</td>
+                        <td style='font-size:6pt;'>{influencer['action_recommended']}</td>
                     </tr>
                 """
             
             html += f"</table><p style='font-size:7.5pt; margin:4px 0;'><strong>🎯 Contexte:</strong> {inf['strategic_context']}</p>"
-        
-        # 7. Recommandations stratégiques (ultra-compacté)
-        if 'recommendations' in report_data:
-            recs = report_data['recommendations']
-            html += f"""
-            <div class="section-title">🎯 RECOMMANDATIONS OPÉRATIONNELLES</div>
-            <div class="two-col">
-            """
-            
-            for priority_level in ['priority_1', 'priority_2']:
-                priority_label = "PRIORITÉ 1 (0-48h)" if priority_level == 'priority_1' else "PRIORITÉ 2 (7-14j)"
-                html += f"<div><p style='font-weight:600; font-size:8pt; margin:4px 0;'>{priority_label}</p>"
-                
-                for rec in recs.get(priority_level, [])[:3]:
-                    html += f"""
-                    <div class="rec-box">
-                        <strong>{rec['title']}</strong><br>
-                        <span style='font-size:7pt;'>{rec['action']}</span><br>
-                        <span style='font-size:6.5pt; color:#3b82f6;'>⏰ {rec['deadline']} | 📈 {rec['impact']}</span>
-                    </div>
-                    """
-                
-                html += "</div>"
-            
-            html += "</div>"
         
         # Footer
         html += """
