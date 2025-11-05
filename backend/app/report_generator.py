@@ -1,757 +1,959 @@
 """
-Générateur de rapports intelligents avec IA
-Utilise les agents IA pour analyser le contenu web et générer des insights avancés
+Générateur de Rapports Intelligents avec IA Souveraine
+Génère des rapports complets basés sur l'analyse IA sans dépendance externe
 """
 
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, desc
+from sqlalchemy import func, desc, and_
 from collections import Counter
+import json
 import asyncio
+from io import BytesIO
 
-from enhanced_ai_service import ReportIntelligenceAgent, AnalysisContext, WebContent
+from ia_service import IntelligentAnalysisAgent, AnalysisContext
 from app.models import Keyword, Mention
 
 logger = logging.getLogger(__name__)
 
 
 class IntelligentReportGenerator:
-    """Générateur de rapports intelligent avec IA et analyse web"""
+    """Générateur de rapports avec IA souveraine"""
     
     def __init__(self, db: Session):
         self.db = db
-        self.ai_agent = ReportIntelligenceAgent()
+        self.ai_agent = IntelligentAnalysisAgent()
     
-    async def generate_intelligent_report(
+    async def generate_complete_report(
         self,
         keyword_ids: List[int],
         days: int = 30,
-        report_object: str = "",
-        include_web_analysis: bool = True
+        report_title: str = "",
+        include_web_analysis: bool = True,
+        format_type: str = "pdf"
     ) -> Dict:
-        """Générer un rapport enrichi avec analyse IA avancée"""
+        """Générer un rapport complet avec analyse IA"""
         
+        # 1. Valider les paramètres
         keywords = self.db.query(Keyword).filter(Keyword.id.in_(keyword_ids)).all()
         if not keywords:
             raise ValueError("Aucun mot-clé trouvé")
         
-        keywords_names = [kw.keyword for kw in keywords]
+        keyword_names = [kw.keyword for kw in keywords]
         since_date = datetime.utcnow() - timedelta(days=days)
         
-        # Récupérer toutes les mentions
-        mentions = self.db.query(Mention).filter(
-            Mention.keyword_id.in_(keyword_ids),
-            Mention.published_at >= since_date
-        ).order_by(desc(Mention.published_at)).all()
+        logger.info(f"Génération rapport IA: {len(keywords)} mots-clés, {days} jours")
         
-        # Préparer le contexte d'analyse pour l'IA
-        analysis_context = self._prepare_analysis_context(mentions, keywords_names, days)
+        # 2. Récupérer les données de base
+        base_data = await self._collect_base_data(keyword_ids, since_date)
         
-        # Générer l'analyse IA avec enrichissement web
-        ai_analysis = await self.ai_agent.generate_intelligent_analysis(
+        # 3. Préparer le contexte d'analyse
+        analysis_context = self._prepare_analysis_context(
+            base_data, keyword_names, days
+        )
+        
+        # 4. Lancer l'analyse IA
+        ai_analysis = await self.ai_agent.generate_intelligent_report(
             analysis_context, 
             self.db if include_web_analysis else None
         )
         
-        # Préparer les données du rapport
+        # 5. Compiler le rapport final
         report_data = {
-            'keywords': keywords_names,
-            'keyword_ids': keyword_ids,
-            'period_days': days,
-            'report_object': report_object or ', '.join(keywords_names),
-            'generated_at': datetime.utcnow(),
-            'total_mentions': len(mentions),
-            'ai_analysis': ai_analysis,  # Analyse IA complète
-            'web_content_analyzed': len(analysis_context.web_content) if hasattr(analysis_context, 'web_content') else 0,
+            'metadata': {
+                'title': report_title or f"Rapport IA - {', '.join(keyword_names)}",
+                'keywords': keyword_names,
+                'keyword_ids': keyword_ids,
+                'period_days': days,
+                'generated_at': datetime.utcnow(),
+                'include_web_analysis': include_web_analysis,
+                'format': format_type
+            },
+            'summary': {
+                'total_mentions': len(base_data['mentions']),
+                'sources_count': len(base_data['sources_distribution']),
+                'period_analyzed': f"{days} jours",
+                'web_content_analyzed': len(analysis_context.web_content) if analysis_context.web_content else 0
+            },
+            'base_data': base_data,
+            'ai_analysis': ai_analysis,
+            'visualizations': self._prepare_visualizations(base_data, ai_analysis),
+            'actionable_insights': self._extract_actionable_insights(ai_analysis),
+            'executive_summary': self._generate_executive_summary(base_data, ai_analysis)
         }
         
-        # Analyses traditionnelles enrichies avec l'IA
-        positive_mentions = [m for m in mentions if m.sentiment == 'positive']
-        negative_mentions = [m for m in mentions if m.sentiment == 'negative']
-        neutral_mentions = [m for m in mentions if m.sentiment == 'neutral']
-        
-        report_data['smart_analysis'] = self._generate_smart_analysis(mentions, days, ai_analysis)
-        report_data['engagement_insights'] = self._analyze_engagement_patterns(mentions, ai_analysis)
-        report_data['authenticity_assessment'] = self._assess_content_authenticity(ai_analysis)
-        report_data['actionable_recommendations'] = self._generate_actionable_recommendations(ai_analysis, mentions)
-        report_data['risk_assessment'] = self._generate_enhanced_risk_assessment(mentions, days, ai_analysis)
-        report_data['web_insights'] = self._extract_web_insights(ai_analysis)
-        
+        logger.info("Rapport IA généré avec succès")
         return report_data
     
-    def _prepare_analysis_context(self, mentions: List, keywords: List[str], days: int) -> AnalysisContext:
-        """Prépare le contexte pour l'analyse IA"""
+    async def _collect_base_data(self, keyword_ids: List[int], since_date: datetime) -> Dict:
+        """Collecter les données de base depuis la base de données"""
         
-        # Convertir les mentions en dictionnaires
+        # Récupérer toutes les mentions
+        mentions_query = self.db.query(Mention).filter(
+            Mention.keyword_id.in_(keyword_ids),
+            Mention.published_at >= since_date
+        ).order_by(desc(Mention.published_at))
+        
+        mentions = mentions_query.all()
+        
+        # Convertir en dictionnaires pour l'IA
         mentions_data = []
-        for m in mentions:
+        for mention in mentions:
             mentions_data.append({
-                'title': m.title,
-                'content': m.content,
-                'sentiment': m.sentiment,
-                'source': m.source,
-                'source_url': m.source_url,
-                'author': m.author,
-                'engagement_score': m.engagement_score,
-                'published_at': m.published_at.isoformat() if m.published_at else None
+                'id': mention.id,
+                'title': mention.title,
+                'content': mention.content,
+                'author': mention.author,
+                'source': mention.source,
+                'source_url': mention.source_url,
+                'sentiment': mention.sentiment,
+                'engagement_score': mention.engagement_score,
+                'published_at': mention.published_at.isoformat() if mention.published_at else None,
+                'collected_at': mention.collected_at.isoformat(),
+                'metadata': json.loads(mention.mention_metadata) if mention.mention_metadata else {}
             })
         
-        # Calculer la distribution des sentiments
-        sentiment_dist = {'positive': 0, 'neutral': 0, 'negative': 0}
-        for m in mentions:
-            if m.sentiment:
-                sentiment_dist[m.sentiment] = sentiment_dist.get(m.sentiment, 0) + 1
+        # Analyser les distributions
+        sentiment_distribution = self._calculate_sentiment_distribution(mentions)
+        sources_distribution = self._calculate_sources_distribution(mentions)
+        temporal_distribution = self._calculate_temporal_distribution(mentions)
+        engagement_stats = self._calculate_engagement_stats(mentions)
+        top_authors = self._calculate_top_authors(mentions)
         
-        # Statistiques par source
-        source_counts = Counter([m.source for m in mentions])
-        
-        # Statistiques d'engagement
-        engagement_scores = [m.engagement_score for m in mentions]
-        engagement_stats = {
-            'total': sum(engagement_scores),
-            'average': sum(engagement_scores) / len(engagement_scores) if engagement_scores else 0,
-            'max': max(engagement_scores) if engagement_scores else 0
+        return {
+            'mentions': mentions_data,
+            'sentiment_distribution': sentiment_distribution,
+            'sources_distribution': sources_distribution,
+            'temporal_distribution': temporal_distribution,
+            'engagement_stats': engagement_stats,
+            'top_authors': top_authors,
+            'geographic_hints': self._extract_geographic_hints(mentions),
+            'content_categories': self._categorize_content(mentions_data)
         }
+    
+    def _prepare_analysis_context(self, base_data: Dict, keyword_names: List[str], days: int) -> AnalysisContext:
+        """Préparer le contexte pour l'analyse IA"""
         
-        # Données temporelles
-        timeline = {}
+        # Préparer les données temporelles
+        time_trends = []
+        for date_str, count in base_data['temporal_distribution'].items():
+            time_trends.append({
+                'date': date_str,
+                'count': count
+            })
+        
+        time_trends.sort(key=lambda x: x['date'])
+        
+        # Préparer les données d'influenceurs
+        influencers_data = []
+        for author_data in base_data['top_authors'][:20]:  # Top 20
+            sentiment_score = self._calculate_author_sentiment_score(
+                author_data['author'], base_data['mentions']
+            )
+            
+            influencers_data.append({
+                'author': author_data['author'],
+                'source': author_data['main_source'],
+                'mention_count': author_data['mentions_count'],
+                'total_engagement': author_data['total_engagement'],
+                'avg_engagement': author_data['avg_engagement'],
+                'sentiment_score': sentiment_score
+            })
+        
+        return AnalysisContext(
+            mentions=base_data['mentions'],
+            keywords=keyword_names,
+            period_days=days,
+            total_mentions=len(base_data['mentions']),
+            sentiment_distribution=base_data['sentiment_distribution'],
+            top_sources=base_data['sources_distribution'],
+            engagement_stats=base_data['engagement_stats'],
+            geographic_data=[],  # Sera enrichi si nécessaire
+            influencers_data=influencers_data,
+            time_trends=time_trends,
+            web_content=[]  # Sera enrichi par l'IA
+        )
+    
+    def _calculate_sentiment_distribution(self, mentions: List) -> Dict[str, int]:
+        """Calculer la distribution des sentiments"""
+        distribution = {'positive': 0, 'neutral': 0, 'negative': 0, 'unknown': 0}
+        
+        for mention in mentions:
+            sentiment = mention.sentiment or 'unknown'
+            if sentiment in distribution:
+                distribution[sentiment] += 1
+            else:
+                distribution['unknown'] += 1
+        
+        return distribution
+    
+    def _calculate_sources_distribution(self, mentions: List) -> Dict[str, int]:
+        """Calculer la distribution des sources"""
+        return dict(Counter(mention.source for mention in mentions).most_common())
+    
+    def _calculate_temporal_distribution(self, mentions: List) -> Dict[str, int]:
+        """Calculer la distribution temporelle"""
+        daily_counts = {}
+        
         for mention in mentions:
             if mention.published_at:
-                date_key = mention.published_at.date()
-                timeline[date_key] = timeline.get(date_key, 0) + 1
+                date_key = mention.published_at.date().isoformat()
+                daily_counts[date_key] = daily_counts.get(date_key, 0) + 1
         
-        time_trends = [
-            {'date': str(date), 'count': count}
-            for date, count in sorted(timeline.items())
-        ]
+        return daily_counts
+    
+    def _calculate_engagement_stats(self, mentions: List) -> Dict[str, float]:
+        """Calculer les statistiques d'engagement"""
+        engagements = [mention.engagement_score for mention in mentions if mention.engagement_score]
         
-        # Données d'influenceurs
-        influencers_data = []
+        if not engagements:
+            return {'total': 0, 'average': 0, 'max': 0, 'min': 0}
+        
+        return {
+            'total': sum(engagements),
+            'average': sum(engagements) / len(engagements),
+            'max': max(engagements),
+            'min': min(engagements),
+            'count': len(engagements)
+        }
+    
+    def _calculate_top_authors(self, mentions: List) -> List[Dict]:
+        """Calculer les top auteurs"""
         author_stats = {}
+        
         for mention in mentions:
             author = mention.author
             if author not in author_stats:
                 author_stats[author] = {
                     'author': author,
-                    'source': mention.source,
-                    'mention_count': 0,
+                    'mentions_count': 0,
                     'total_engagement': 0,
+                    'sources': set(),
                     'sentiments': []
                 }
             
-            author_stats[author]['mention_count'] += 1
-            author_stats[author]['total_engagement'] += mention.engagement_score
+            stats = author_stats[author]
+            stats['mentions_count'] += 1
+            stats['total_engagement'] += mention.engagement_score
+            stats['sources'].add(mention.source)
             if mention.sentiment:
-                author_stats[author]['sentiments'].append(mention.sentiment)
+                stats['sentiments'].append(mention.sentiment)
         
+        # Formater les résultats
+        top_authors = []
         for author, stats in author_stats.items():
-            sentiments = stats['sentiments']
-            positive_ratio = sentiments.count('positive') / len(sentiments) if sentiments else 0
-            
-            influencers_data.append({
-                'author': author,
-                'source': stats['source'],
-                'mention_count': stats['mention_count'],
-                'total_engagement': stats['total_engagement'],
-                'sentiment_score': positive_ratio * 100,
-                'avg_engagement': stats['total_engagement'] / stats['mention_count']
-            })
+            if stats['mentions_count'] >= 2:  # Au moins 2 mentions
+                top_authors.append({
+                    'author': author,
+                    'mentions_count': stats['mentions_count'],
+                    'total_engagement': stats['total_engagement'],
+                    'avg_engagement': stats['total_engagement'] / stats['mentions_count'],
+                    'sources_count': len(stats['sources']),
+                    'main_source': list(stats['sources'])[0] if stats['sources'] else 'unknown',
+                    'positive_ratio': stats['sentiments'].count('positive') / len(stats['sentiments']) if stats['sentiments'] else 0
+                })
         
         # Trier par engagement total
-        influencers_data.sort(key=lambda x: x['total_engagement'], reverse=True)
-        
-        return AnalysisContext(
-            mentions=mentions_data,
-            keywords=keywords,
-            period_days=days,
-            total_mentions=len(mentions),
-            sentiment_distribution=sentiment_dist,
-            top_sources=dict(source_counts.most_common(5)),
-            engagement_stats=engagement_stats,
-            geographic_data=[],  # À implémenter selon vos besoins
-            influencers_data=influencers_data,
-            time_trends=time_trends,
-            web_content=[]  # Sera rempli par l'agent IA
-        )
+        top_authors.sort(key=lambda x: x['total_engagement'], reverse=True)
+        return top_authors
     
-    def _generate_smart_analysis(self, mentions: List, days: int, ai_analysis: Dict) -> Dict:
-        """Générer une analyse intelligente basée sur l'IA"""
+    def _calculate_author_sentiment_score(self, author: str, mentions: List[Dict]) -> float:
+        """Calculer le score de sentiment pour un auteur"""
+        author_mentions = [m for m in mentions if m['author'] == author]
         
-        # Extraire les insights IA
-        sentiment_insights = ai_analysis.get('sentiment', {}).get('analysis', '')
-        trend_insights = ai_analysis.get('trends', {}).get('analysis', '')
-        influencer_insights = ai_analysis.get('influencers', {}).get('analysis', '')
-        web_insights = ai_analysis.get('web_content', {}).get('analysis', '')
+        if not author_mentions:
+            return 50.0  # Neutre par défaut
         
-        # Calculer des métriques intelligentes
-        total_mentions = len(mentions)
-        avg_engagement = sum(m.engagement_score for m in mentions) / total_mentions if total_mentions > 0 else 0
+        sentiments = [m['sentiment'] for m in author_mentions if m['sentiment']]
         
-        # Score de viralité
-        high_engagement_mentions = [m for m in mentions if m.engagement_score > avg_engagement * 2]
-        virality_score = len(high_engagement_mentions) / total_mentions if total_mentions > 0 else 0
+        if not sentiments:
+            return 50.0
         
-        # Score de diversité des sources
-        unique_sources = len(set(m.source for m in mentions))
-        diversity_score = min(unique_sources / 5, 1.0)  # Normaliser sur 5 sources
+        positive_count = sentiments.count('positive')
+        negative_count = sentiments.count('negative')
+        total_count = len(sentiments)
         
-        return {
-            'summary': f"Analyse de {total_mentions} mentions sur {days} jours avec insights IA avancés",
-            'key_insights': [
-                sentiment_insights[:100] + "..." if len(sentiment_insights) > 100 else sentiment_insights,
-                trend_insights[:100] + "..." if len(trend_insights) > 100 else trend_insights,
-                influencer_insights[:100] + "..." if len(influencer_insights) > 100 else influencer_insights
-            ],
-            'web_context': web_insights[:200] + "..." if len(web_insights) > 200 else web_insights,
-            'intelligence_metrics': {
-                'virality_score': round(virality_score, 3),
-                'diversity_score': round(diversity_score, 3),
-                'avg_engagement': round(avg_engagement, 2),
-                'ai_confidence': ai_analysis.get('executive_summary', {}).get('key_metrics', {}).get('analysis_confidence', 0.0)
-            }
+        # Score sur 100 (0 = très négatif, 100 = très positif)
+        if total_count == 0:
+            return 50.0
+        
+        positive_ratio = positive_count / total_count
+        negative_ratio = negative_count / total_count
+        
+        # Formule: base 50 + écart positif - écart négatif
+        score = 50 + (positive_ratio * 50) - (negative_ratio * 50)
+        return max(0, min(100, score))
+    
+    def _extract_geographic_hints(self, mentions: List) -> List[Dict]:
+        """Extraire des indices géographiques du contenu"""
+        # Mots-clés géographiques simples
+        geo_keywords = {
+            'france': 'FR', 'paris': 'FR', 'lyon': 'FR', 'marseille': 'FR',
+            'usa': 'US', 'america': 'US', 'new york': 'US', 'california': 'US',
+            'uk': 'GB', 'london': 'GB', 'england': 'GB',
+            'germany': 'DE', 'berlin': 'DE', 'allemagne': 'DE',
+            'canada': 'CA', 'toronto': 'CA', 'montreal': 'CA',
+            'japan': 'JP', 'tokyo': 'JP', 'japon': 'JP',
+            'china': 'CN', 'beijing': 'CN', 'chine': 'CN'
         }
-    
-    def _analyze_engagement_patterns(self, mentions: List, ai_analysis: Dict) -> Dict:
-        """Analyser les patterns d'engagement avec l'IA"""
         
-        if not mentions:
-            return {'pattern': 'Aucune donnée', 'insights': []}
+        geo_mentions = {}
         
-        # Analyser la distribution temporelle de l'engagement
-        daily_engagement = {}
         for mention in mentions:
-            if mention.published_at:
-                date_key = mention.published_at.date()
-                if date_key not in daily_engagement:
-                    daily_engagement[date_key] = {'count': 0, 'total_engagement': 0}
-                daily_engagement[date_key]['count'] += 1
-                daily_engagement[date_key]['total_engagement'] += mention.engagement_score
+            content_lower = f"{mention.title} {mention.content}".lower()
+            
+            for geo_term, country_code in geo_keywords.items():
+                if geo_term in content_lower:
+                    if country_code not in geo_mentions:
+                        geo_mentions[country_code] = 0
+                    geo_mentions[country_code] += 1
         
-        # Calculer les moyennes quotidiennes
-        daily_averages = []
-        for date, data in daily_engagement.items():
-            avg_engagement = data['total_engagement'] / data['count'] if data['count'] > 0 else 0
-            daily_averages.append({
-                'date': str(date),
-                'avg_engagement': avg_engagement,
-                'mention_count': data['count']
+        # Convertir en liste triée
+        geo_data = []
+        for country_code, count in sorted(geo_mentions.items(), key=lambda x: x[1], reverse=True):
+            geo_data.append({
+                'country_code': country_code,
+                'mentions_count': count
             })
         
-        # Identifier les pics d'engagement
-        if daily_averages:
-            avg_global = sum(d['avg_engagement'] for d in daily_averages) / len(daily_averages)
-            peaks = [d for d in daily_averages if d['avg_engagement'] > avg_global * 1.5]
-        else:
-            peaks = []
+        return geo_data[:10]  # Top 10 pays
+    
+    def _categorize_content(self, mentions: List[Dict]) -> Dict[str, int]:
+        """Catégoriser le contenu par thèmes"""
+        categories = {
+            'actualité': ['news', 'breaking', 'actualité', 'info', 'journal'],
+            'opinion': ['opinion', 'avis', 'pense', 'crois', 'selon moi'],
+            'analyse': ['analyse', 'étude', 'rapport', 'recherche', 'data'],
+            'promotion': ['promo', 'offre', 'discount', 'solde', 'achat'],
+            'service client': ['problème', 'bug', 'aide', 'support', 'sav'],
+            'événement': ['événement', 'event', 'conférence', 'salon', 'meeting']
+        }
         
-        # Extraire les insights IA sur l'engagement
-        web_engagement = ai_analysis.get('web_content', {}).get('engagement_patterns', {})
+        category_counts = {cat: 0 for cat in categories.keys()}
+        category_counts['autre'] = 0
         
-        return {
-            'pattern': 'Variable' if len(peaks) > 2 else 'Stable',
-            'daily_averages': daily_averages[-7:],  # 7 derniers jours
-            'engagement_peaks': peaks,
-            'web_engagement_rate': web_engagement.get('engagement_rate', 0),
-            'authenticity_indicators': {
-                'web_authenticity': ai_analysis.get('web_content', {}).get('authenticity_score', 0),
-                'comment_quality': 'High' if web_engagement.get('comments_with_likes', 0) > 0 else 'Low'
+        for mention in mentions:
+            content_lower = f"{mention['title']} {mention['content']}".lower()
+            
+            categorized = False
+            for category, keywords in categories.items():
+                if any(keyword in content_lower for keyword in keywords):
+                    category_counts[category] += 1
+                    categorized = True
+                    break
+            
+            if not categorized:
+                category_counts['autre'] += 1
+        
+        return category_counts
+    
+    def _prepare_visualizations(self, base_data: Dict, ai_analysis: Dict) -> Dict:
+        """Préparer les données de visualisation"""
+        
+        visualizations = {
+            'sentiment_chart': {
+                'type': 'pie',
+                'data': base_data['sentiment_distribution'],
+                'title': 'Distribution des Sentiments'
             },
-            'insights': [
-                f"Pics d'engagement détectés: {len(peaks)} jours",
-                f"Taux d'engagement web: {web_engagement.get('engagement_rate', 0):.1%}",
-                f"Authenticité estimée: {ai_analysis.get('web_content', {}).get('authenticity_score', 0):.1f}/1.0"
-            ]
-        }
-    
-    def _assess_content_authenticity(self, ai_analysis: Dict) -> Dict:
-        """Évaluer l'authenticité du contenu avec l'IA"""
-        
-        # Récupérer les analyses d'authenticité de l'IA
-        web_analysis = ai_analysis.get('web_content', {})
-        sentiment_analysis = ai_analysis.get('sentiment', {})
-        
-        authenticity_score = web_analysis.get('authenticity_score', 0.5)
-        
-        # Déterminer le niveau d'authenticité
-        if authenticity_score >= 0.8:
-            authenticity_level = "ÉLEVÉE"
-            color = "#10b981"
-        elif authenticity_score >= 0.6:
-            authenticity_level = "MODÉRÉE"
-            color = "#f59e0b"
-        else:
-            authenticity_level = "FAIBLE"
-            color = "#ef4444"
-        
-        # Indicateurs d'authenticité
-        indicators = []
-        
-        if web_analysis.get('comment_insights', {}).get('unique_authors', 0) > 0:
-            unique_ratio = web_analysis['comment_insights']['unique_authors'] / max(web_analysis['comment_insights'].get('total_comments', 1), 1)
-            indicators.append(f"Diversité des commentateurs: {unique_ratio:.1%}")
-        
-        if 'web_vs_mentions' in sentiment_analysis:
-            alignment = sentiment_analysis['web_vs_mentions'].get('alignment', 'Unknown')
-            indicators.append(f"Cohérence sentiment mentions/web: {alignment}")
-        
-        web_engagement = web_analysis.get('engagement_patterns', {})
-        if web_engagement.get('total_comments', 0) > 0:
-            indicators.append(f"Engagement réel détecté: {web_engagement['total_comments']} commentaires")
-        
-        return {
-            'authenticity_level': authenticity_level,
-            'authenticity_score': round(authenticity_score, 2),
-            'color': color,
-            'indicators': indicators,
-            'red_flags': self._detect_red_flags(ai_analysis),
-            'confidence': 'High' if len(indicators) >= 3 else 'Medium' if len(indicators) >= 2 else 'Low'
-        }
-    
-    def _detect_red_flags(self, ai_analysis: Dict) -> List[str]:
-        """Détecter les signaux d'alarme d'inauthenticité"""
-        red_flags = []
-        
-        web_analysis = ai_analysis.get('web_content', {})
-        
-        # Authenticité faible
-        if web_analysis.get('authenticity_score', 1.0) < 0.5:
-            red_flags.append("Score d'authenticité faible détecté par l'IA")
-        
-        # Peu de commentaires uniques
-        comment_insights = web_analysis.get('comment_insights', {})
-        if comment_insights.get('total_comments', 0) > 0:
-            unique_ratio = comment_insights.get('unique_authors', 0) / comment_insights['total_comments']
-            if unique_ratio < 0.7:
-                red_flags.append("Faible diversité des commentateurs")
-        
-        # Divergence sentiment mentions/web
-        sentiment_analysis = ai_analysis.get('sentiment', {})
-        if sentiment_analysis.get('web_vs_mentions', {}).get('alignment') == 'Divergent':
-            red_flags.append("Divergence entre sentiment officiel et réactions publiques")
-        
-        return red_flags
-    
-    def _generate_actionable_recommendations(self, ai_analysis: Dict, mentions: List) -> Dict:
-        """Générer des recommandations actionnables basées sur l'IA"""
-        
-        recommendations = {
-            'immediate': [],
-            'short_term': [],
-            'long_term': []
+            'sources_chart': {
+                'type': 'bar',
+                'data': dict(list(base_data['sources_distribution'].items())[:10]),
+                'title': 'Top 10 Sources'
+            },
+            'timeline_chart': {
+                'type': 'line',
+                'data': base_data['temporal_distribution'],
+                'title': 'Évolution Temporelle'
+            },
+            'engagement_chart': {
+                'type': 'histogram',
+                'data': self._prepare_engagement_histogram(base_data['mentions']),
+                'title': 'Distribution de l\'Engagement'
+            }
         }
         
-        # Recommandations basées sur les insights IA
-        sentiment_insights = ai_analysis.get('sentiment', {}).get('key_insights', [])
-        influencer_analysis = ai_analysis.get('influencers', {})
-        web_analysis = ai_analysis.get('web_content', {})
+        # Ajouter les graphiques IA si disponibles
+        if 'trends' in ai_analysis:
+            trends_data = ai_analysis['trends'].get('patterns', {})
+            if trends_data.get('peaks'):
+                visualizations['peaks_chart'] = {
+                    'type': 'scatter',
+                    'data': trends_data['peaks'],
+                    'title': 'Pics d\'Activité Détectés'
+                }
         
-        # Recommandations immédiates
-        executive_summary = ai_analysis.get('executive_summary', {})
-        if executive_summary.get('priority_level') == 'CRITIQUE':
-            recommendations['immediate'].append({
-                'action': '🚨 Activation de la cellule de crise',
-                'reason': 'Niveau de priorité critique détecté par l\'IA',
-                'deadline': '2h'
+        return visualizations
+    
+    def _prepare_engagement_histogram(self, mentions: List[Dict]) -> List[Dict]:
+        """Préparer l'histogramme d'engagement"""
+        engagements = [m['engagement_score'] for m in mentions if m['engagement_score'] > 0]
+        
+        if not engagements:
+            return []
+        
+        # Créer des bins
+        max_engagement = max(engagements)
+        bin_size = max_engagement / 10 if max_engagement > 0 else 1
+        
+        bins = []
+        for i in range(10):
+            min_val = i * bin_size
+            max_val = (i + 1) * bin_size
+            count = sum(1 for eng in engagements if min_val <= eng < max_val)
+            
+            bins.append({
+                'range': f"{int(min_val)}-{int(max_val)}",
+                'count': count
             })
         
-        # Gestion des influenceurs à risque
-        high_risk_influencers = influencer_analysis.get('risk_assessment', {}).get('high_risk', [])
+        return bins
+    
+    def _extract_actionable_insights(self, ai_analysis: Dict) -> List[Dict]:
+        """Extraire les insights actionnables de l'analyse IA"""
+        insights = []
+        
+        # Insights de sentiment
+        if 'sentiment' in ai_analysis:
+            sentiment_insights = ai_analysis['sentiment'].get('insights', [])
+            for insight in sentiment_insights:
+                insights.append({
+                    'category': 'sentiment',
+                    'priority': 'high' if 'critique' in insight.lower() else 'medium',
+                    'message': insight,
+                    'action': self._suggest_action_for_sentiment_insight(insight)
+                })
+        
+        # Insights d'influenceurs
+        if 'influencers' in ai_analysis:
+            risk_assessment = ai_analysis['influencers'].get('risk_assessment', {})
+            high_risk_count = len(risk_assessment.get('high_risk', []))
+            if high_risk_count > 0:
+                insights.append({
+                    'category': 'influencers',
+                    'priority': 'critical',
+                    'message': f"{high_risk_count} influenceur(s) à risque élevé identifié(s)",
+                    'action': 'Engagement immédiat nécessaire avec ces comptes'
+                })
+        
+        # Insights de tendances
+        if 'trends' in ai_analysis:
+            patterns = ai_analysis['trends'].get('patterns', {})
+            peaks_count = patterns.get('peaks_detected', 0)
+            if peaks_count > 2:
+                insights.append({
+                    'category': 'trends',
+                    'priority': 'medium',
+                    'message': f"{peaks_count} pics d'activité détectés",
+                    'action': 'Analyser les causes des pics pour anticipation future'
+                })
+        
+        # Insights de contenu web
+        if 'web_content' in ai_analysis:
+            engagement_analysis = ai_analysis['web_content'].get('engagement_analysis', {})
+            if engagement_analysis.get('engagement_rate', 0) < 0.3:
+                insights.append({
+                    'category': 'web_content',
+                    'priority': 'medium',
+                    'message': 'Taux d\'engagement web faible détecté',
+                    'action': 'Optimiser la stratégie de contenu pour plus d\'interaction'
+                })
+        
+        return insights[:10]  # Limiter à 10 insights
+    
+    def _suggest_action_for_sentiment_insight(self, insight: str) -> str:
+        """Suggérer une action basée sur un insight de sentiment"""
+        insight_lower = insight.lower()
+        
+        if 'critique' in insight_lower or 'crise' in insight_lower:
+            return 'Activation protocole de gestion de crise'
+        elif 'négatif' in insight_lower:
+            return 'Préparation de stratégie de correction d\'image'
+        elif 'positif' in insight_lower and 'opportunité' in insight_lower:
+            return 'Capitaliser sur le sentiment positif avec campagne ciblée'
+        elif 'polarisé' in insight_lower:
+            return 'Communication équilibrée pour réconcilier les opinions'
+        else:
+            return 'Surveillance continue et analyse approfondie'
+    
+    def _generate_executive_summary(self, base_data: Dict, ai_analysis: Dict) -> Dict:
+        """Générer un résumé exécutif"""
+        
+        # Extraire les éléments clés
+        total_mentions = len(base_data['mentions'])
+        
+        # Sentiment dominant
+        sentiment_dist = base_data['sentiment_distribution']
+        total_sentiment = sum(sentiment_dist.values())
+        
+        if total_sentiment > 0:
+            sentiment_percentages = {
+                k: (v / total_sentiment) * 100 
+                for k, v in sentiment_dist.items()
+            }
+            
+            dominant_sentiment = max(sentiment_percentages, key=sentiment_percentages.get)
+            dominant_percentage = sentiment_percentages[dominant_sentiment]
+        else:
+            dominant_sentiment = 'unknown'
+            dominant_percentage = 0
+        
+        # Niveau de priorité de l'IA
+        ai_priority = ai_analysis.get('synthesis', {}).get('priority_level', 'NORMAL')
+        
+        # Top source
+        top_source = max(base_data['sources_distribution'], key=base_data['sources_distribution'].get) if base_data['sources_distribution'] else 'unknown'
+        
+        # Engagement moyen
+        avg_engagement = base_data['engagement_stats'].get('average', 0)
+        
+        # Construire le résumé
+        summary = {
+            'key_figures': {
+                'total_mentions': total_mentions,
+                'dominant_sentiment': f"{dominant_sentiment} ({dominant_percentage:.0f}%)",
+                'top_source': top_source,
+                'avg_engagement': round(avg_engagement, 1),
+                'ai_priority_level': ai_priority
+            },
+            'main_findings': self._extract_main_findings(ai_analysis),
+            'critical_points': self._extract_critical_points(ai_analysis),
+            'next_steps': self._extract_next_steps(ai_analysis),
+            'confidence_score': self._calculate_confidence_score(base_data, ai_analysis)
+        }
+        
+        return summary
+    
+    def _extract_main_findings(self, ai_analysis: Dict) -> List[str]:
+        """Extraire les principales découvertes"""
+        findings = []
+        
+        # Findings de sentiment
+        sentiment_analysis = ai_analysis.get('sentiment', {}).get('analysis', '')
+        if sentiment_analysis:
+            # Extraire la première phrase comme finding principal
+            first_sentence = sentiment_analysis.split('.')[0]
+            if len(first_sentence) > 20:
+                findings.append(f"Sentiment: {first_sentence}")
+        
+        # Findings de tendances
+        trends_analysis = ai_analysis.get('trends', {}).get('analysis', '')
+        if trends_analysis:
+            first_sentence = trends_analysis.split('.')[0]
+            if len(first_sentence) > 20:
+                findings.append(f"Tendances: {first_sentence}")
+        
+        # Findings d'influenceurs
+        influencers_analysis = ai_analysis.get('influencers', {})
+        if influencers_analysis.get('top_influencers'):
+            top_count = len(influencers_analysis['top_influencers'])
+            findings.append(f"Influenceurs: {top_count} comptes influents identifiés")
+        
+        # Findings de contenu web
+        web_analysis = ai_analysis.get('web_content', {})
+        if web_analysis.get('articles_count', 0) > 0:
+            articles_count = web_analysis['articles_count']
+            comments_count = web_analysis.get('comments_count', 0)
+            findings.append(f"Contenu web: {articles_count} articles analysés, {comments_count} commentaires extraits")
+        
+        return findings[:5]  # Top 5 findings
+    
+    def _extract_critical_points(self, ai_analysis: Dict) -> List[str]:
+        """Extraire les points critiques"""
+        critical_points = []
+        
+        # Points critiques basés sur la priorité
+        priority = ai_analysis.get('synthesis', {}).get('priority_level', 'NORMAL')
+        
+        if priority == 'CRITIQUE':
+            critical_points.append("🚨 NIVEAU CRITIQUE: Intervention immédiate requise")
+        elif priority == 'ÉLEVÉ':
+            critical_points.append("⚠️ NIVEAU ÉLEVÉ: Surveillance renforcée nécessaire")
+        
+        # Points critiques des influenceurs
+        influencer_risks = ai_analysis.get('influencers', {}).get('risk_assessment', {})
+        high_risk_influencers = influencer_risks.get('high_risk', [])
         if high_risk_influencers:
-            recommendations['immediate'].append({
-                'action': f'📞 Contact direct avec {len(high_risk_influencers)} influenceur(s) critique(s)',
-                'reason': 'Influenceurs à risque élevé identifiés',
-                'deadline': '24h'
-            })
+            critical_points.append(
+                f"👑 INFLUENCEURS À RISQUE: {len(high_risk_influencers)} compte(s) critique(s)"
+            )
         
-        # Recommandations à court terme
-        if web_analysis.get('authenticity_score', 1.0) < 0.6:
-            recommendations['short_term'].append({
-                'action': '🔍 Investigation approfondie de l\'authenticité',
-                'reason': 'Score d\'authenticité faible détecté',
-                'timeline': '48h'
-            })
-        
-        # Opportunités de communication
-        if any('opportunité' in insight.lower() for insight in sentiment_insights):
-            recommendations['short_term'].append({
-                'action': '💬 Campagne de communication ciblée',
-                'reason': 'Opportunités identifiées par l\'analyse IA',
-                'timeline': '1 semaine'
-            })
-        
-        # Recommandations à long terme
-        if web_analysis.get('comment_insights', {}).get('total_comments', 0) > 50:
-            recommendations['long_term'].append({
-                'action': '👥 Programme d\'engagement communautaire',
-                'reason': 'Communauté active détectée dans les commentaires',
-                'timeline': '1 mois'
-            })
-        
-        # Surveillance continue
-        trend_analysis = ai_analysis.get('trends', {})
-        if trend_analysis.get('alert_level') in ['modéré', 'élevé']:
-            recommendations['long_term'].append({
-                'action': '📊 Renforcement du système de surveillance',
-                'reason': 'Tendances volatiles détectées',
-                'timeline': 'Continu'
-            })
-        
-        return recommendations
-    
-    def _generate_enhanced_risk_assessment(self, mentions: List, days: int, ai_analysis: Dict) -> Dict:
-        """Générer une évaluation de risque enrichie avec l'IA"""
-        
-        if not mentions:
-            return {
-                'risk_level': 'FAIBLE',
-                'risk_score': 0,
-                'ai_assessment': 'Aucune donnée à analyser'
-            }
-        
-        # Calculs de base
-        total_mentions = len(mentions)
-        negative_mentions = [m for m in mentions if m.sentiment == 'negative']
-        negative_ratio = len(negative_mentions) / total_mentions
-        
-        avg_engagement = sum(m.engagement_score for m in mentions) / len(mentions)
-        max_engagement = max(m.engagement_score for m in mentions)
-        
-        # Score de base
-        volume_score = min(total_mentions / (days * 10), 1.0) * 25
-        sentiment_score = negative_ratio * 30
-        engagement_score = min((avg_engagement + max_engagement) / 2000, 1.0) * 20
-        
-        base_risk_score = volume_score + sentiment_score + engagement_score
-        
-        # Ajustement avec l'IA
-        executive_summary = ai_analysis.get('executive_summary', {})
-        ai_priority = executive_summary.get('priority_level', 'NORMAL')
-        
-        ai_adjustment = 0
-        if ai_priority == 'CRITIQUE':
-            ai_adjustment = 25
-        elif ai_priority == 'MODÉRÉ':
-            ai_adjustment = 15
-        
-        # Facteur d'authenticité
-        authenticity_score = ai_analysis.get('web_content', {}).get('authenticity_score', 1.0)
-        if authenticity_score < 0.5:
-            ai_adjustment += 10  # Risque supplémentaire si contenu suspect
-        
-        final_score = min(base_risk_score + ai_adjustment, 100)
-        
-        # Déterminer le niveau
-        if final_score >= 75:
-            risk_level = 'CRITIQUE'
-            color = '#dc2626'
-        elif final_score >= 50:
-            risk_level = 'ÉLEVÉ'
-            color = '#ef4444'
-        elif final_score >= 30:
-            risk_level = 'MODÉRÉ'
-            color = '#f59e0b'
-        else:
-            risk_level = 'FAIBLE'
-            color = '#10b981'
-        
-        return {
-            'risk_level': risk_level,
-            'risk_score': round(final_score, 1),
-            'color': color,
-            'ai_assessment': executive_summary.get('summary', 'Analyse IA non disponible'),
-            'contributing_factors': {
-                'volume': round(volume_score, 1),
-                'sentiment': round(sentiment_score, 1),
-                'engagement': round(engagement_score, 1),
-                'ai_intelligence': ai_adjustment,
-                'authenticity_concern': 10 if authenticity_score < 0.5 else 0
-            },
-            'alert_status': executive_summary.get('key_metrics', {}).get('alert_status', 'NORMAL'),
-            'confidence_level': executive_summary.get('key_metrics', {}).get('analysis_confidence', 0.0)
-        }
-    
-    def _extract_web_insights(self, ai_analysis: Dict) -> Dict:
-        """Extraire les insights spécifiques au contenu web"""
-        
+        # Points critiques du contenu web
         web_analysis = ai_analysis.get('web_content', {})
+        engagement_analysis = web_analysis.get('engagement_analysis', {})
+        if engagement_analysis.get('engagement_rate', 1) < 0.2:
+            critical_points.append("📉 ENGAGEMENT FAIBLE: Réactivité du public préoccupante")
         
-        if not web_analysis or 'error' in web_analysis:
-            return {
-                'available': False,
-                'reason': 'Analyse web non disponible ou erreur lors de l\'extraction'
-            }
+        # Points critiques des tendances
+        trends_patterns = ai_analysis.get('trends', {}).get('patterns', {})
+        if trends_patterns.get('peaks_detected', 0) > 3:
+            critical_points.append("📈 VOLATILITÉ ÉLEVÉE: Activité très irrégulière détectée")
         
-        article_insights = web_analysis.get('article_insights', [])
-        comment_insights = web_analysis.get('comment_insights', {})
+        return critical_points[:5]  # Top 5 points critiques
+    
+    def _extract_next_steps(self, ai_analysis: Dict) -> List[str]:
+        """Extraire les prochaines étapes recommandées"""
+        next_steps = []
         
-        return {
-            'available': True,
-            'articles_analyzed': len(article_insights),
-            'total_comments': comment_insights.get('total_comments', 0),
-            'unique_commentators': comment_insights.get('unique_authors', 0),
-            'top_domains': [article['domain'] for article in article_insights[:5]],
-            'most_engaged_comment': comment_insights.get('top_engaged_comments', [{}])[0] if comment_insights.get('top_engaged_comments') else None,
-            'authenticity_assessment': web_analysis.get('authenticity_score', 0),
-            'key_findings': [
-                f"{len(article_insights)} articles analysés en profondeur",
-                f"{comment_insights.get('total_comments', 0)} commentaires extraits et analysés",
-                f"Score d'authenticité: {web_analysis.get('authenticity_score', 0):.1f}/1.0",
-                f"Taux d'engagement: {web_analysis.get('engagement_patterns', {}).get('engagement_rate', 0):.1%}"
-            ]
-        }
-
-    async def generate_intelligent_html_report(self, report_data: Dict) -> str:
-        """Générer le rapport HTML intelligent enrichi"""
+        # Étapes basées sur les recommandations IA
+        recommendations = ai_analysis.get('recommendations', {})
+        if recommendations.get('urgent_actions'):
+            next_steps.extend(recommendations['urgent_actions'][:3])
         
-        # CSS optimisé pour rapport intelligent
+        # Étapes génériques basées sur la priorité
+        priority = ai_analysis.get('synthesis', {}).get('priority_level', 'NORMAL')
+        
+        if priority in ['CRITIQUE', 'ÉLEVÉ']:
+            next_steps.append("Mise en place monitoring H24")
+            next_steps.append("Préparation éléments de communication")
+        
+        # Étapes basées sur l'analyse web
+        web_analysis = ai_analysis.get('web_content', {})
+        if web_analysis.get('articles_count', 0) > 0:
+            next_steps.append("Suivi des nouveaux articles et commentaires")
+        
+        # Si pas d'étapes spécifiques, ajouter des étapes génériques
+        if not next_steps:
+            next_steps.extend([
+                "Continuer la surveillance habituelle",
+                "Analyser l'évolution sur 24-48h",
+                "Préparer points de vigilance"
+            ])
+        
+        return next_steps[:5]  # Top 5 étapes
+    
+    def _calculate_confidence_score(self, base_data: Dict, ai_analysis: Dict) -> float:
+        """Calculer un score de confiance pour l'analyse"""
+        confidence_factors = []
+        
+        # Facteur 1: Volume de données
+        mentions_count = len(base_data['mentions'])
+        if mentions_count >= 100:
+            confidence_factors.append(0.9)
+        elif mentions_count >= 50:
+            confidence_factors.append(0.7)
+        elif mentions_count >= 20:
+            confidence_factors.append(0.5)
+        else:
+            confidence_factors.append(0.3)
+        
+        # Facteur 2: Diversité des sources
+        sources_count = len(base_data['sources_distribution'])
+        if sources_count >= 5:
+            confidence_factors.append(0.8)
+        elif sources_count >= 3:
+            confidence_factors.append(0.6)
+        else:
+            confidence_factors.append(0.4)
+        
+        # Facteur 3: Période d'analyse
+        # (supposé correct car géré en amont)
+        confidence_factors.append(0.7)
+        
+        # Facteur 4: Analyse web disponible
+        web_analysis = ai_analysis.get('web_content', {})
+        if web_analysis.get('articles_count', 0) > 0:
+            confidence_factors.append(0.9)
+        else:
+            confidence_factors.append(0.6)
+        
+        # Facteur 5: Qualité des données de sentiment
+        sentiment_dist = base_data['sentiment_distribution']
+        total_sentiment = sum(sentiment_dist.values())
+        unknown_ratio = sentiment_dist.get('unknown', 0) / max(total_sentiment, 1)
+        
+        if unknown_ratio < 0.2:
+            confidence_factors.append(0.8)
+        elif unknown_ratio < 0.5:
+            confidence_factors.append(0.6)
+        else:
+            confidence_factors.append(0.4)
+        
+        # Calculer la moyenne
+        return sum(confidence_factors) / len(confidence_factors)
+    
+    async def generate_html_report(self, report_data: Dict) -> str:
+        """Générer le rapport au format HTML"""
+        
+        metadata = report_data['metadata']
+        summary = report_data['summary']
+        ai_analysis = report_data['ai_analysis']
+        executive_summary = report_data['executive_summary']
+        
         html = f"""
         <!DOCTYPE html>
-        <html>
+        <html lang="fr">
         <head>
             <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{metadata['title']}</title>
             <style>
-                @page {{ size: A4; margin: 0.8cm; }}
-                body {{ font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; line-height: 1.4; font-size: 9pt; margin: 0; padding: 0; }}
-                .header {{ text-align: center; padding: 8px 0; border-bottom: 3px solid #667eea; margin-bottom: 12px; }}
-                .header h1 {{ color: #667eea; font-size: 18pt; margin: 0 0 4px 0; font-weight: 700; }}
-                .header .subtitle {{ color: #6b7280; font-size: 8pt; line-height: 1.2; }}
-                .ai-badge {{ background: linear-gradient(45deg, #667eea, #764ba2); color: white; padding: 3px 8px; border-radius: 12px; font-size: 7pt; font-weight: bold; margin-left: 8px; }}
-                .section-title {{ color: #667eea; font-size: 11pt; font-weight: bold; margin: 10px 0 6px 0; padding-bottom: 3px; border-bottom: 1px solid #e5e7eb; }}
-                .ai-section {{ background: linear-gradient(135deg, #667eea15, #764ba205); border-left: 4px solid #667eea; padding: 10px; margin: 8px 0; border-radius: 6px; }}
-                .intelligence-metric {{ display: inline-block; background: #f3f4f6; padding: 4px 8px; border-radius: 6px; margin: 2px; font-size: 8pt; }}
-                .risk-assessment {{ padding: 12px; border-radius: 8px; margin: 8px 0; }}
-                .risk-critique {{ background: #fee2e2; border: 2px solid #dc2626; }}
-                .risk-eleve {{ background: #fef2f2; border: 2px solid #ef4444; }}
-                .risk-modere {{ background: #fef3c7; border: 2px solid #f59e0b; }}
-                .risk-faible {{ background: #f0fdf4; border: 2px solid #10b981; }}
-                .web-insight {{ background: #f0f9ff; border-left: 4px solid #0ea5e9; padding: 8px; margin: 6px 0; }}
-                .recommendation {{ background: #fafafa; border-left: 3px solid #8b5cf6; padding: 8px; margin: 4px 0; }}
-                .recommendation.immediate {{ border-left-color: #ef4444; background: #fef2f2; }}
-                .recommendation.short-term {{ border-left-color: #f59e0b; background: #fffbeb; }}
-                .recommendation.long-term {{ border-left-color: #10b981; background: #f0fdf4; }}
-                .authenticity-indicator {{ display: flex; align-items: center; margin: 4px 0; }}
-                .authenticity-bar {{ width: 100px; height: 8px; background: #e5e7eb; border-radius: 4px; overflow: hidden; margin: 0 8px; }}
-                .authenticity-fill {{ height: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981); }}
-                table {{ width: 100%; border-collapse: collapse; font-size: 8pt; margin: 6px 0; }}
-                th {{ background: #667eea; color: white; padding: 4px; text-align: left; }}
-                td {{ padding: 4px; border-bottom: 1px solid #e5e7eb; }}
-                .insight-box {{ background: #f8fafc; border: 1px solid #e2e8f0; padding: 6px; border-radius: 4px; margin: 4px 0; font-size: 8pt; }}
+                body {{ 
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    line-height: 1.6; color: #333; max-width: 1200px; margin: 0 auto; padding: 20px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                }}
+                .container {{ 
+                    background: white; border-radius: 15px; padding: 40px; 
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+                }}
+                .header {{ 
+                    text-align: center; padding-bottom: 30px; 
+                    border-bottom: 3px solid #667eea; margin-bottom: 30px;
+                }}
+                .header h1 {{ 
+                    color: #667eea; font-size: 2.5em; margin: 0 0 10px 0; 
+                    background: linear-gradient(135deg, #667eea, #764ba2);
+                    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+                }}
+                .ai-badge {{ 
+                    background: linear-gradient(45deg, #667eea, #764ba2); 
+                    color: white; padding: 8px 16px; border-radius: 20px; 
+                    font-size: 0.9em; font-weight: bold; margin: 0 10px;
+                    display: inline-block;
+                }}
+                .section {{ margin: 30px 0; }}
+                .section-title {{ 
+                    color: #667eea; font-size: 1.5em; font-weight: bold; 
+                    margin: 20px 0 15px 0; padding-bottom: 8px; 
+                    border-bottom: 2px solid #e5e7eb;
+                }}
+                .ai-section {{ 
+                    background: linear-gradient(135deg, #667eea15, #764ba205); 
+                    border-left: 5px solid #667eea; padding: 20px; margin: 15px 0; 
+                    border-radius: 8px;
+                }}
+                .metrics-grid {{ 
+                    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
+                    gap: 20px; margin: 20px 0;
+                }}
+                .metric-card {{ 
+                    background: linear-gradient(135deg, #f8fafc, #e2e8f0); 
+                    padding: 20px; border-radius: 10px; text-align: center;
+                    border: 1px solid #e5e7eb;
+                }}
+                .metric-value {{ 
+                    font-size: 2em; font-weight: bold; color: #667eea; margin: 10px 0;
+                }}
+                .metric-label {{ 
+                    color: #6b7280; font-size: 0.9em; font-weight: 500;
+                }}
+                .priority-critical {{ 
+                    background: #fef2f2; border: 2px solid #dc2626; color: #dc2626;
+                }}
+                .priority-high {{ 
+                    background: #fef3c7; border: 2px solid #f59e0b; color: #f59e0b;
+                }}
+                .priority-medium {{ 
+                    background: #f0f9ff; border: 2px solid #3b82f6; color: #3b82f6;
+                }}
+                .priority-normal {{ 
+                    background: #f0fdf4; border: 2px solid #10b981; color: #10b981;
+                }}
+                .insight-list {{ list-style: none; padding: 0; }}
+                .insight-item {{ 
+                    background: #f9fafb; margin: 8px 0; padding: 15px; 
+                    border-left: 4px solid #667eea; border-radius: 6px;
+                }}
+                .finding-item {{
+                    background: #f8fafc; margin: 10px 0; padding: 12px;
+                    border-radius: 6px; border-left: 3px solid #10b981;
+                }}
+                .critical-point {{
+                    background: #fef2f2; margin: 10px 0; padding: 12px;
+                    border-radius: 6px; border-left: 3px solid #ef4444;
+                    font-weight: 500;
+                }}
+                .next-step {{
+                    background: #f0f9ff; margin: 8px 0; padding: 10px;
+                    border-radius: 6px; border-left: 3px solid #3b82f6;
+                }}
+                .confidence-bar {{
+                    width: 100%; height: 20px; background: #e5e7eb; 
+                    border-radius: 10px; overflow: hidden; margin: 10px 0;
+                }}
+                .confidence-fill {{
+                    height: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981);
+                    border-radius: 10px; transition: width 0.3s ease;
+                }}
+                .footer {{ 
+                    margin-top: 40px; padding-top: 20px; 
+                    border-top: 2px solid #e5e7eb; text-align: center; 
+                    color: #6b7280; font-size: 0.9em;
+                }}
             </style>
         </head>
         <body>
-        
-        <!-- En-tête -->
-        <div class="header">
-            <h1>🤖 RAPPORT INTELLIGENT - ANALYSE IA AVANCÉE</h1>
-            <div class="subtitle">
-                <strong>{report_data['report_object']}</strong>
-                <span class="ai-badge">IA SOUVERAINE</span><br>
-                Période: {report_data['period_days']} jours | Généré: {report_data['generated_at'].strftime('%d/%m/%Y %H:%M')}<br>
-                Mots-clés: {', '.join(report_data['keywords'])} | Total mentions: {report_data['total_mentions']}
-                {f" | Contenu web analysé: {report_data['web_content_analyzed']} sources" if report_data.get('web_content_analyzed', 0) > 0 else ""}
-            </div>
-        </div>
+            <div class="container">
+                <!-- Header -->
+                <div class="header">
+                    <h1>🤖 {metadata['title']}</h1>
+                    <span class="ai-badge">IA SOUVERAINE</span>
+                    <span class="ai-badge">ANALYSE INTELLIGENTE</span>
+                    <p style="color: #6b7280; margin-top: 15px;">
+                        Généré le {metadata['generated_at'].strftime('%d/%m/%Y à %H:%M')} • 
+                        Période: {metadata['period_days']} jours • 
+                        Mots-clés: {', '.join(metadata['keywords'])}
+                    </p>
+                </div>
+                
+                <!-- Résumé Exécutif -->
+                <div class="section">
+                    <h2 class="section-title">📊 Résumé Exécutif</h2>
+                    <div class="metrics-grid">
+                        <div class="metric-card">
+                            <div class="metric-value">{summary['total_mentions']}</div>
+                            <div class="metric-label">Total Mentions</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">{executive_summary['key_figures']['dominant_sentiment']}</div>
+                            <div class="metric-label">Sentiment Dominant</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">{executive_summary['key_figures']['top_source']}</div>
+                            <div class="metric-label">Source Principale</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value">{executive_summary['key_figures']['avg_engagement']}</div>
+                            <div class="metric-label">Engagement Moyen</div>
+                        </div>
+                    </div>
+                    
+                    <div class="ai-section priority-{executive_summary['key_figures']['ai_priority_level'].lower()}">
+                        <h3>🎯 Niveau de Priorité IA: {executive_summary['key_figures']['ai_priority_level']}</h3>
+                        <div style="margin-top: 15px;">
+                            <strong>Score de Confiance:</strong>
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" style="width: {executive_summary['confidence_score']*100:.0f}%;"></div>
+                            </div>
+                            {executive_summary['confidence_score']*100:.0f}% de confiance dans l'analyse
+                        </div>
+                    </div>
+                </div>
         """
         
-        # Synthèse exécutive IA
-        if 'ai_analysis' in report_data and 'executive_summary' in report_data['ai_analysis']:
-            executive = report_data['ai_analysis']['executive_summary']
-            priority_class = f"risk-{executive.get('priority_level', 'normal').lower()}"
-            confidence = executive.get('key_metrics', {}).get('analysis_confidence', 0.0)
-            
-            html += f"""
-            <div class="section-title">🧠 SYNTHÈSE EXÉCUTIVE IA</div>
-            <div class="ai-section {priority_class}">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <strong style="font-size: 11pt;">NIVEAU DE PRIORITÉ: {executive.get('priority_level', 'NORMAL')}</strong>
-                    <div>
-                        <span style="font-size: 7pt;">Confiance IA: {confidence*100:.0f}%</span>
-                        <div style="display: inline-block; width: 40px; height: 6px; background: #e5e7eb; border-radius: 3px; margin-left: 5px; overflow: hidden;">
-                            <div style="width: {confidence*100}%; height: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981);"></div>
-                        </div>
-                    </div>
-                </div>
-                <p style="margin: 6px 0;"><strong>🎯 Analyse:</strong> {executive.get('summary', 'Analyse IA en cours...')}</p>
-                <p style="font-size: 8pt; margin: 4px 0; color: #4b5563;"><strong>📊 Statut:</strong> {executive.get('key_metrics', {}).get('alert_status', 'Normal')}</p>
-                {f"<p style='font-size: 8pt; margin: 4px 0; color: #4b5563;'><strong>🌐 Sources web analysées:</strong> {executive.get('key_metrics', {}).get('web_content_analyzed', 0)}</p>" if executive.get('key_metrics', {}).get('web_content_analyzed', 0) > 0 else ""}
-            </div>
+        # Principales découvertes
+        if executive_summary.get('main_findings'):
+            html += """
+                <div class="section">
+                    <h2 class="section-title">🔍 Principales Découvertes</h2>
             """
+            for finding in executive_summary['main_findings']:
+                html += f'<div class="finding-item">{finding}</div>'
+            html += "</div>"
         
-        # Analyse intelligente
-        if 'smart_analysis' in report_data:
-            smart = report_data['smart_analysis']
-            html += f"""
-            <div class="section-title">🎯 ANALYSE INTELLIGENTE</div>
-            <div class="ai-section">
-                <p><strong>Résumé:</strong> {smart['summary']}</p>
-                <div style="margin: 8px 0;">
-                    <strong>Métriques d'intelligence:</strong>
-                    <div style="margin-top: 4px;">
-                        <span class="intelligence-metric">🚀 Viralité: {smart['intelligence_metrics']['virality_score']:.2f}</span>
-                        <span class="intelligence-metric">🌐 Diversité: {smart['intelligence_metrics']['diversity_score']:.2f}</span>
-                        <span class="intelligence-metric">📊 Engagement moy: {smart['intelligence_metrics']['avg_engagement']:.1f}</span>
-                        <span class="intelligence-metric">🤖 Confiance IA: {smart['intelligence_metrics']['ai_confidence']:.1%}</span>
-                    </div>
-                </div>
-                <div><strong>💡 Insights clés:</strong></div>
-                <ul style="margin: 4px 0; padding-left: 15px; font-size: 8pt;">
-                    {chr(10).join([f'<li>{insight}</li>' for insight in smart['key_insights'] if insight.strip()])}
-                </ul>
-                {f"<div class='web-insight'><strong>🌐 Contexte web:</strong> {smart.get('web_context', '')}</div>" if smart.get('web_context') else ""}
-            </div>
+        # Points critiques
+        if executive_summary.get('critical_points'):
+            html += """
+                <div class="section">
+                    <h2 class="section-title">🚨 Points Critiques</h2>
             """
+            for point in executive_summary['critical_points']:
+                html += f'<div class="critical-point">{point}</div>'
+            html += "</div>"
         
-        # Évaluation de risque enrichie IA
-        if 'risk_assessment' in report_data:
-            risk = report_data['risk_assessment']
-            risk_class = f"risk-{risk['risk_level'].lower().replace('é', 'e')}"
-            
-            html += f"""
-            <div class="section-title">🚨 ÉVALUATION DE RISQUE IA</div>
-            <div class="risk-assessment {risk_class}">
-                <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 8px;">
-                    <strong style="font-size: 12pt;">NIVEAU: {risk['risk_level']} ({risk['risk_score']}/100)</strong>
-                    <span style="font-size: 8pt; margin-left: auto;">Confiance: {risk['confidence_level']:.1%}</span>
-                </div>
-                <p style="margin: 6px 0;"><strong>🤖 Évaluation IA:</strong> {risk['ai_assessment']}</p>
-                <p style="font-size: 8pt; margin: 4px 0;"><strong>📈 Statut d'alerte:</strong> {risk['alert_status']}</p>
-                
-                <div style="margin-top: 8px;">
-                    <strong style="font-size: 9pt;">Facteurs contributifs:</strong>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 4px; font-size: 7pt;">
-                        <div>Volume: {risk['contributing_factors']['volume']}</div>
-                        <div>Sentiment: {risk['contributing_factors']['sentiment']}</div>
-                        <div>Engagement: {risk['contributing_factors']['engagement']}</div>
-                        <div>IA Intelligence: {risk['contributing_factors']['ai_intelligence']}</div>
-                        <div>Authenticité: {risk['contributing_factors']['authenticity_concern']}</div>
-                    </div>
-                </div>
-            </div>
-            """
-        
-        # Évaluation d'authenticité
-        if 'authenticity_assessment' in report_data:
-            auth = report_data['authenticity_assessment']
-            html += f"""
-            <div class="section-title">🔍 ÉVALUATION D'AUTHENTICITÉ</div>
-            <div class="ai-section">
-                <div class="authenticity-indicator">
-                    <strong>{auth['authenticity_level']}</strong>
-                    <div class="authenticity-bar">
-                        <div class="authenticity-fill" style="width: {auth['authenticity_score']*100}%;"></div>
-                    </div>
-                    <span>{auth['authenticity_score']}/1.0</span>
-                    <span style="margin-left: 8px; font-size: 7pt; color: {auth['color']};">●</span>
-                </div>
-                
-                <div style="margin: 6px 0;">
-                    <strong>Indicateurs positifs:</strong>
-                    <ul style="margin: 2px 0; padding-left: 15px; font-size: 8pt;">
-                        {chr(10).join([f'<li>{indicator}</li>' for indicator in auth['indicators']])}
-                    </ul>
-                </div>
-                
-                {f"<div style='margin: 6px 0;'><strong>🚩 Signaux d'alarme:</strong><ul style='margin: 2px 0; padding-left: 15px; font-size: 8pt;'>{chr(10).join([f'<li style=\"color: #ef4444;\">{flag}</li>' for flag in auth['red_flags']])}</ul></div>" if auth.get('red_flags') else ""}
-                
-                <p style="font-size: 7pt; margin: 4px 0; color: #6b7280;">Confiance de l'évaluation: {auth['confidence']}</p>
-            </div>
-            """
-        
-        # Insights web spécifiques
-        if 'web_insights' in report_data and report_data['web_insights'].get('available'):
-            web = report_data['web_insights']
-            html += f"""
-            <div class="section-title">🌐 ANALYSE CONTENU WEB</div>
-            <div class="web-insight">
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; font-size: 8pt;">
-                    <div><strong>{web['articles_analyzed']}</strong><br>Articles analysés</div>
-                    <div><strong>{web['total_comments']}</strong><br>Commentaires extraits</div>
-                    <div><strong>{web['unique_commentators']}</strong><br>Commentateurs uniques</div>
-                    <div><strong>{web['authenticity_assessment']:.1f}/1.0</strong><br>Score authenticité</div>
-                </div>
-                
-                <div><strong>🔍 Résultats clés:</strong></div>
-                <ul style="margin: 4px 0; padding-left: 15px; font-size: 8pt;">
-                    {chr(10).join([f'<li>{finding}</li>' for finding in web['key_findings']])}
-                </ul>
-                
-                {f"<div style='margin-top: 6px;'><strong>💬 Commentaire le plus engageant:</strong><br><em style='font-size: 7pt;'>\"{web['most_engaged_comment']['text'][:100]}...\" - {web['most_engaged_comment']['author']} ({web['most_engaged_comment']['likes']} likes)</em></div>" if web.get('most_engaged_comment') else ""}
-            </div>
-            """
-        
-        # Patterns d'engagement intelligents
-        if 'engagement_insights' in report_data:
-            engagement = report_data['engagement_insights']
-            html += f"""
-            <div class="section-title">📊 PATTERNS D'ENGAGEMENT IA</div>
-            <div class="ai-section">
-                <p><strong>Pattern détecté:</strong> {engagement['pattern']}</p>
-                
-                <div style="margin: 6px 0;">
-                    <strong>Indicateurs d'authenticité:</strong>
-                    <span class="intelligence-metric">🌐 Authenticité web: {engagement['authenticity_indicators']['web_authenticity']:.1f}</span>
-                    <span class="intelligence-metric">💬 Qualité commentaires: {engagement['authenticity_indicators']['comment_quality']}</span>
-                </div>
-                
-                <div><strong>💡 Insights:</strong></div>
-                <ul style="margin: 4px 0; padding-left: 15px; font-size: 8pt;">
-                    {chr(10).join([f'<li>{insight}</li>' for insight in engagement['insights']])}
-                </ul>
-            </div>
-            """
-        
-        # Recommandations actionnables
-        if 'actionable_recommendations' in report_data:
-            recs = report_data['actionable_recommendations']
-            html += f"""
-            <div class="section-title">🎯 RECOMMANDATIONS ACTIONNABLES IA</div>
-            """
-            
-            for priority, actions in recs.items():
-                if actions:
-                    priority_labels = {
-                        'immediate': '🚨 ACTIONS IMMÉDIATES',
-                        'short_term': '⚡ COURT TERME',
-                        'long_term': '🎯 LONG TERME'
-                    }
-                    
-                    html += f"<div style='margin: 8px 0;'><strong>{priority_labels.get(priority, priority.upper())}</strong></div>"
-                    
-                    for action in actions:
-                        deadline_key = 'deadline' if 'deadline' in action else 'timeline'
-                        html += f"""
-                        <div class="recommendation {priority}">
-                            <strong>{action['action']}</strong><br>
-                            <span style="font-size: 8pt;">{action['reason']}</span><br>
-                            <span style="font-size: 7pt; color: #6b7280;">⏰ {action.get(deadline_key, 'Non spécifié')}</span>
-                        </div>
-                        """
-        
-        # Footer avec info IA
+        # Analyses IA
         html += """
-            <div style="margin-top: 12px; padding-top: 8px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 7pt; color: #9ca3af;">
-                <p>🤖 Rapport généré avec Intelligence Artificielle Souveraine • Agents IA Spécialisés • Analyse Web Avancée</p>
-                <p style="margin-top: 4px;">🧠 Sentiment • 📈 Tendances • 👑 Influenceurs • 🌐 Contenu Web • 🔍 Authenticité</p>
+            <div class="section">
+                <h2 class="section-title">🧠 Analyses IA Détaillées</h2>
+        """
+        
+        for analysis_type, analysis_data in ai_analysis.items():
+            if isinstance(analysis_data, dict) and 'analysis' in analysis_data:
+                type_name = analysis_type.replace('_', ' ').title()
+                analysis_text = analysis_data['analysis']
+                
+                html += f"""
+                    <div class="ai-section">
+                        <h3>🤖 {type_name}</h3>
+                        <p>{analysis_text}</p>
+                    </div>
+                """
+        
+        # Prochaines étapes
+        if executive_summary.get('next_steps'):
+            html += """
+                <div class="section">
+                    <h2 class="section-title">➡️ Prochaines Étapes Recommandées</h2>
+            """
+            for i, step in enumerate(executive_summary['next_steps'], 1):
+                html += f'<div class="next-step">{i}. {step}</div>'
+            html += "</div>"
+        
+        # Insights actionnables
+        actionable_insights = report_data.get('actionable_insights', [])
+        if actionable_insights:
+            html += """
+                <div class="section">
+                    <h2 class="section-title">💡 Insights Actionnables</h2>
+                    <ul class="insight-list">
+            """
+            for insight in actionable_insights:
+                priority_class = f"priority-{insight['priority']}"
+                html += f"""
+                    <li class="insight-item {priority_class}">
+                        <strong>[{insight['category'].upper()}]</strong> {insight['message']}<br>
+                        <em>Action suggérée: {insight['action']}</em>
+                    </li>
+                """
+            html += "</ul></div>"
+        
+        # Footer
+        html += f"""
+                <div class="footer">
+                    <p>🤖 Rapport généré par IA Souveraine • Brand Monitor Intelligence</p>
+                    <p>Analyse basée sur {summary['total_mentions']} mentions • 
+                       {summary['sources_count']} sources • 
+                       {summary.get('web_content_analyzed', 0)} contenus web analysés</p>
+                    <p style="font-size: 0.8em; margin-top: 10px;">
+                        Technologies: Ollama + HuggingFace Transformers • 
+                        Extraction Web Intelligente • Analyse Multi-Agents
+                    </p>
+                </div>
             </div>
         </body>
         </html>
         """
         
         return html
-
-    async def generate_intelligent_pdf(self, report_data: Dict) -> bytes:
-        """Générer le PDF du rapport intelligent"""
+    
+    async def generate_pdf_report(self, report_data: Dict) -> bytes:
+        """Générer le rapport au format PDF"""
         try:
-            from weasyprint import HTML
+            from weasyprint import HTML, CSS
             
-            html_content = await self.generate_intelligent_html_report(report_data)
-            pdf_bytes = HTML(string=html_content).write_pdf()
+            # Générer le HTML
+            html_content = await self.generate_html_report(report_data)
+            
+            # CSS pour PDF
+            pdf_css = CSS(string="""
+                @page {
+                    size: A4;
+                    margin: 1cm;
+                }
+                body {
+                    background: white !important;
+                    font-size: 10pt;
+                }
+                .container {
+                    box-shadow: none !important;
+                }
+            """)
+            
+            # Générer le PDF
+            pdf_bytes = HTML(string=html_content).write_pdf(stylesheets=[pdf_css])
             
             return pdf_bytes
             
         except ImportError:
-            logger.warning("WeasyPrint not available, generating HTML only")
-            html_content = await self.generate_intelligent_html_report(report_data)
+            logger.warning("WeasyPrint non disponible, retour HTML")
+            html_content = await self.generate_html_report(report_data)
+            return html_content.encode('utf-8')
+        except Exception as e:
+            logger.error(f"Erreur génération PDF: {e}")
+            # Fallback vers HTML
+            html_content = await self.generate_html_report(report_data)
             return html_content.encode('utf-8')

@@ -1,0 +1,218 @@
+# ===== DÉPENDANCES IA SOUVERAINE =====
+# Configuration optimisée pour l'IA autonome sans API externes
+
+# ===== MONITORING IA =====
+# Métriques modèles ML
+mlflow>=2.8.0
+
+# Monitoring performances
+psutil>=5.9.6
+
+# Cache intelligent
+diskcache>=5.6.3
+
+
+# ===== SPÉCIFIQUE IA ET ANALYSE =====
+# Modèles pré-entraînés français
+spacy-models-fr>=3.7.0
+
+# ===== MODÈLES LLM LOCAUX =====
+# Ollama - Modèles LLM locaux (Recommandé)
+ollama>=0.1.8
+
+# ===== HUGGINGFACE TRANSFORMERS =====
+# Modèles de transformers pour analyses spécialisées
+transformers>=4.36.0
+torch>=2.1.0
+tokenizers>=0.15.0
+safetensors>=0.4.0
+
+# Accélération et optimisation
+accelerate>=0.25.0
+optimum>=1.16.0
+
+# Modèles pré-entraînés
+sentence-transformers>=2.2.2
+
+# ===== ANALYSE DE SENTIMENT AVANCÉE =====
+# Analyseurs de sentiment multilingues
+vaderSentiment==3.3.2
+textblob>=0.17.1
+
+# Support français
+python-Levenshtein>=0.21.1
+
+# ===== WEB SCRAPING ET EXTRACTION =====
+# Parsing HTML intelligent
+beautifulsoup4>=4.12.3
+lxml>=5.1.0
+selectolax>=0.3.17
+trafilatura>=1.6.4
+
+# Requests asynchrones pour extraction web
+aiohttp>=3.9.3
+httpx>=0.26.0
+aiofiles>=23.2.0
+
+# Gestion sessions et cookies
+aiohttp-session>=2.12.0
+
+# User agents rotatifs pour éviter blocage
+fake-useragent>=1.4.0
+
+# ===== TRAITEMENT DE TEXTE AVANCÉ =====
+# Traitement du langage naturel
+nltk>=3.8.1
+spacy>=3.7.0
+
+# Détection de langue
+langdetect>=1.0.9
+polyglot>=16.7.4
+
+# Expression régulières avancées
+regex>=2023.10.3
+
+# ===== MODÈLES FRANÇAIS =====
+# Modèles spécialisés français (à installer séparément)
+# python -m spacy download fr_core_news_md
+# spacy-models-fr>=3.7.0
+
+# ===== ANALYSE DE DONNÉES =====
+# Manipulation de données pour l'IA
+pandas>=2.1.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# Statistiques avancées
+scikit-learn>=1.3.0
+statsmodels>=0.14.0
+
+# ===== DÉTECTION D'ENTITÉS ET CLASSIFICATION =====
+# Classification zero-shot
+setfit>=1.0.0
+
+# Détection d'entités nommées
+spacy-transformers>=1.3.0
+
+# ===== CLUSTERING ET ANALYSE SÉMANTIQUE =====
+# Clustering de documents
+umap-learn>=0.5.4
+hdbscan>=0.8.33
+
+# Similarité sémantique
+faiss-cpu>=1.7.4
+
+# ===== OPTIMISATION PERFORMANCE =====
+# Cache intelligent pour modèles
+diskcache>=5.6.3
+
+# Monitoring performances
+psutil>=5.9.6
+
+# Parallélisation
+joblib>=1.3.2
+
+# ===== GESTION ERREURS ET RETRY =====
+# Gestion intelligente des erreurs
+tenacity>=8.2.3
+backoff>=2.2.1
+
+# ===== VALIDATION ET SÉCURITÉ =====
+# Validation des URLs et données
+validators>=0.22.0
+
+# Nettoyage de texte sécurisé
+bleach>=6.1.0
+
+# ===== FORMATS DE SORTIE =====
+# Génération PDF (WeasyPrint)
+weasyprint>=61.0
+cairocffi>=1.6.0
+cffi>=1.15.0
+
+# Pillow pour images
+Pillow>=10.0.0
+
+# CSS pour PDF
+tinycss2>=1.2.1
+cssselect2>=0.7.0
+
+# ===== LOGGING ET MONITORING =====
+# Logs structurés pour debugging IA
+structlog>=23.2.0
+python-json-logger>=2.0.7
+
+# Métriques modèles ML
+mlflow>=2.8.0
+
+# ===== CONFIGURATION IA =====
+# Variables d'environnement IA
+python-dotenv>=1.0.0
+
+# Configuration YAML pour modèles
+PyYAML>=6.0.1
+
+# ===== UTILITAIRES IA =====
+# Dates et fuseaux horaires
+pytz>=2023.3
+python-dateutil>=2.8.2
+
+# Async compatibility
+asyncio-throttle>=1.0.2
+
+# ===== OPTIONNEL - ACCÉLÉRATION GPU =====
+# Décommentez si vous avez un GPU NVIDIA
+# torch-audio  # Pour l'analyse audio future
+# torchvision  # Pour l'analyse d'images future
+
+# Quantisation de modèles pour économiser la mémoire
+# bitsandbytes>=0.41.0
+
+# Extension Intel pour CPU (si processeur Intel)
+# intel-extension-for-pytorch>=2.1.0
+
+# ===== MODÈLES SPÉCIALISÉS (Optionnel) =====
+# Décommentez selon vos besoins
+
+# # Classification de contenu
+# transformers[torch]
+# 
+# # Analyse d'émotions avancée
+# emotion>=0.2.0
+#
+# # Détection de fake news
+# newspaper3k>=0.2.8
+#
+# # Analyse de toxicité
+# detoxify>=0.5.0
+#
+# # Résumé automatique avancé
+# sumy>=0.11.0
+
+# ===== INSTALLATION GPU (Optionnel) =====
+# Pour installer PyTorch avec support GPU:
+# pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# ===== COMMANDES POST-INSTALLATION =====
+# Après installation, exécuter:
+# 1. Télécharger modèles NLTK:
+#    python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('vader_lexicon')"
+#
+# 2. Télécharger modèles Spacy français:
+#    python -m spacy download fr_core_news_sm
+#    python -m spacy download fr_core_news_md  # Plus précis mais plus lourd
+#
+# 3. Installer Ollama (recommandé):
+#    curl -fsSL https://ollama.ai/install.sh | sh
+#    ollama pull mistral:7b
+#    ollama pull llama2:7b
+#
+# 4. Test du service IA:
+#    python -c "from ia_service import SovereignLLMService; print('IA disponible:', SovereignLLMService().is_available())"
+
+# ===== NOTES D'OPTIMISATION =====
+# - Utilisez Ollama pour les meilleures performances
+# - HuggingFace Transformers comme fallback
+# - L'analyse par règles fonctionne toujours sans modèles
+# - GPU recommandé mais pas obligatoire
+# - 8GB RAM minimum, 16GB recommandé avec GPU
