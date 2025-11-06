@@ -22,7 +22,7 @@ from app.collectors.bluesky_collector import BlueskyCollector
 from app.collectors.telegram_collector import TelegramCollector
 from pydantic import BaseModel
 from app.api import email_router, influencer_router, geo_router
-from app.reports_api import reports_router
+from app.report_api import intelligent_reports_router
 from app.scheduler import init_scheduler, start_scheduler
 from app.scheduler import stop_scheduler
 
@@ -117,7 +117,7 @@ class AdvancedStatsResponse(BaseModel):
 app.include_router(email_router)
 app.include_router(influencer_router)
 app.include_router(geo_router)
-app.include_router(reports_router)
+app.include_router(intelligent_reports_router)
 
 @app.get("/")
 async def root():
@@ -387,7 +387,7 @@ async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], 
 async def get_mentions(
     keyword: Optional[str] = None,
     source: Optional[str] = None,
-    sentiment: Optional[str] = Query(None, regex="^(positive|negative|neutral)$"),
+    sentiment: Optional[str] = Query(None, pattern="^(positive|negative|neutral)$"),
     min_engagement: Optional[float] = None,
     date_from: Optional[datetime] = None,
     date_to: Optional[datetime] = None,

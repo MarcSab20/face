@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.models import Keyword, Mention
-from report_generator import IntelligentReportGenerator
+from app.report_generator import IntelligentReportGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class IntelligentReportRequest(BaseModel):
     days: int = Field(30, ge=1, le=365, description="Période d'analyse en jours")
     report_title: str = Field("", description="Titre personnalisé du rapport")
     include_web_analysis: bool = Field(True, description="Inclure l'analyse web approfondie")
-    format: str = Field("pdf", regex="^(pdf|html)$", description="Format de sortie")
+    format: str = Field("pdf", pattern="^(pdf|html)$", description="Format de sortie")
 
     class Config:
         schema_extra = {
@@ -761,7 +761,6 @@ def generate_report_async(
     
     # Lancer la tâche asynchrone
     asyncio.create_task(_generate())
-
 
 @intelligent_reports_router.post("/generate-async")
 async def generate_intelligent_report_async(

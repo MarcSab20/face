@@ -13,7 +13,7 @@ import json
 import asyncio
 from io import BytesIO
 
-from ia_service import IntelligentAnalysisAgent, AnalysisContext
+from app.ai_service import IntelligentAnalysisAgent, AnalysisContext
 from app.models import Keyword, Mention
 
 logger = logging.getLogger(__name__)

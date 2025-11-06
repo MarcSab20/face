@@ -67,30 +67,44 @@ class SovereignLLMService:
         """Initialiser Ollama (modèles LLM locaux)"""
         try:
             import ollama
-            self.ollama_client = ollama.Client()
             # Tester la disponibilité
-            models = self.ollama_client.list()
+            models = ollama.list()
             self.ollama_available = True
-            self.available_models = [m['name'] for m in models.get('models', [])]
-            logger.info(f"Ollama disponible avec {len(self.available_models)} modèles")
+            
+            # Parser la structure (objet ou dict)
+            if hasattr(models, 'models'):
+                # Cas: objet avec attribut models
+                self.available_models = [m.model for m in models.models]
+            elif isinstance(models, dict) and 'models' in models:
+                # Cas: dictionnaire
+                self.available_models = [m.get('model') or m.get('name') for m in models['models']]
+            else:
+                self.available_models = []
+            
+            # Nettoyer les noms de modèles (enlever :latest)
+            self.available_models = [
+                m.replace(':latest', '') if ':latest' in m else m 
+                for m in self.available_models
+            ]
+            
+            logger.info(f"Ollama disponible avec {len(self.available_models)} modèles: {', '.join(self.available_models)}")
         except Exception as e:
             logger.warning(f"Ollama non disponible: {e}")
             self.ollama_available = False
-    
+            self.available_models = []
+        
     def _initialize_transformers(self):
         """Initialiser HuggingFace Transformers"""
         try:
             from transformers import pipeline, AutoTokenizer
             import torch
-            
             self.device = 0 if torch.cuda.is_available() else -1
             self.transformers_available = True
-            
             # Charger les modèles spécialisés
             self._load_specialized_models()
             logger.info("HuggingFace Transformers initialisé")
         except ImportError:
-            logger.warning("HuggingFace Transformers non disponible")
+            logger.debug("HuggingFace Transformers non disponible")
             self.transformers_available = False
     
     def _load_specialized_models(self):
@@ -163,7 +177,8 @@ class SovereignLLMService:
             # Construire le prompt enrichi
             enriched_prompt = self._build_enriched_prompt(prompt, context_data)
             
-            response = self.ollama_client.generate(
+            import ollama
+            response = ollama.generate(
                 model=model,
                 prompt=enriched_prompt,
                 options={
@@ -241,7 +256,7 @@ class SovereignLLMService:
     def _select_best_model(self) -> str:
         """Sélectionner le meilleur modèle Ollama disponible"""
         preferred_models = [
-            'mistral:7b', 'llama2:7b', 'codellama:7b', 
+            'tinyllama', 'llama2:7b', 'codellama:7b', 
             'neural-chat:7b', 'llama2:chat'
         ]
         
@@ -250,7 +265,12 @@ class SovereignLLMService:
                 return model
         
         # Prendre le premier disponible
-        return self.available_models[0] if self.available_models else 'llama2'
+        if self.available_models:
+            logger.info(f"Modèle par défaut: {self.available_models[0]}")
+            return self.available_models[0]
+        
+        # Fallback
+        return 'tinyllama'
     
     def _build_enriched_prompt(self, base_prompt: str, context_data: Dict) -> str:
         """Construire un prompt enrichi avec le contexte"""
