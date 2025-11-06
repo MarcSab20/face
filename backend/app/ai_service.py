@@ -67,6 +67,9 @@ class SovereignLLMService:
         """Initialiser Ollama (modèles LLM locaux)"""
         try:
             import ollama
+            import os
+            ollama_host = os.getenv('OLLAMA_HOST', 'http://172.17.0.1:11434')
+            logger.info(f"Tentative de connexion à Ollama sur: {ollama_host}")
             # Tester la disponibilité
             models = ollama.list()
             self.ollama_available = True
@@ -173,24 +176,33 @@ class SovereignLLMService:
         try:
             # Choisir le meilleur modèle disponible
             model = self._select_best_model()
-            
             # Construire le prompt enrichi
             enriched_prompt = self._build_enriched_prompt(prompt, context_data)
-            
-            import ollama
-            response = ollama.generate(
-                model=model,
-                prompt=enriched_prompt,
-                options={
-                    'num_predict': 500,
-                    'temperature': 0.3,  # Moins créatif, plus factuel
-                    'top_p': 0.9,
-                    'stop': ['</analysis>', '<|endoftext|>']
-                }
-            )
-            
+            # Utiliser le client si disponible, sinon utiliser ollama directement
+            if hasattr(self, 'ollama_client') and self.ollama_client:
+                response = self.ollama_client.generate(
+                    model=model,
+                    prompt=enriched_prompt,
+                    options={
+                        'num_predict': 500,
+                        'temperature': 0.3,
+                        'top_p': 0.9,
+                        'stop': ['</analysis>', '<|endoftext|>']
+                    }
+                )
+            else:
+                import ollama
+                response = ollama.generate(
+                    model=model,
+                    prompt=enriched_prompt,
+                    options={
+                        'num_predict': 500,
+                        'temperature': 0.3,
+                        'top_p': 0.9,
+                        'stop': ['</analysis>', '<|endoftext|>']
+                    }
+                )
             return self._clean_llm_response(response['response'])
-            
         except Exception as e:
             logger.error(f"Erreur Ollama: {e}")
             return self._analyze_with_rules(prompt, context_data)

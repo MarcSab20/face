@@ -599,26 +599,32 @@ export default function IntelligentReports() {
               {aiStatusData.recommendation}
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {aiStatusData.models.map((model, index) => (
-                <div key={index} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold text-gray-900 dark:text-white">
-                      {model.name}
-                    </h4>
-                    <Badge variant={model.available ? 'success' : 'danger'} size="sm">
-                      {model.available ? '✅' : '❌'}
-                    </Badge>
+            {aiStatusData.models && aiStatusData.models.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {aiStatusData.models.map((model, index) => (
+                  <div key={index} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-semibold text-gray-900 dark:text-white">
+                        {model.name}
+                      </h4>
+                      <Badge variant={model.available ? 'success' : 'danger'} size="sm">
+                        {model.available ? '✅' : '❌'}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                      {model.description}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500">
+                      Performance: {model.performance}
+                    </p>
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                    {model.description}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-500">
-                    Performance: {model.performance}
-                  </p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <Alert type="warning">
+                Aucun modèle IA détecté. Vérifiez l'installation d'Ollama.
+              </Alert>
+            )}
           </Card>
         </div>
       )}

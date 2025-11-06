@@ -309,7 +309,7 @@ async def get_ai_service_status():
     Vérifie la disponibilité des modèles LLM locaux (Ollama, Transformers)
     """
     try:
-        from ia_service import SovereignLLMService
+        from app.ai_service import SovereignLLMService
         
         # Initialiser le service IA
         llm_service = SovereignLLMService()
