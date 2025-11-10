@@ -43,16 +43,23 @@ interface IntelligentReportPreview {
   period_days: number;
   total_mentions: number;
   estimated_web_sources: number;
-  ai_models_available: string[];
+  sources_distribution: Record<string, number>;
+  sentiment_preview: {
+    distribution: Record<string, number>;
+    negative_ratio: number;
+    dominant: string;
+  };
   processing_time_estimate: string;
-  risk_level_preview?: string;
+  confidence_score: number;
+  risk_indicators: string[];
 }
 
-interface AIModelStatus {
-  name: string;
-  available: boolean;
-  description: string;
-  performance: string;
+interface AIServiceStatus {
+  ai_available: boolean;
+  ollama_status: string;
+  transformers_status: string;
+  models_available: string[];
+  recommendation: string;
 }
 
 interface AICapability {
@@ -65,9 +72,8 @@ interface AICapability {
 export default function IntelligentReports() {
   const [selectedKeywords, setSelectedKeywords] = useState<number[]>([]);
   const [periodDays, setPeriodDays] = useState(30);
-  const [reportObject, setReportObject] = useState('');
+  const [reportTitle, setReportTitle] = useState('');
   const [includeWebAnalysis, setIncludeWebAnalysis] = useState(true);
-  const [aiModel, setAiModel] = useState('mistral:7b');
   const [format, setFormat] = useState<'pdf' | 'html'>('pdf');
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [showAIStatusModal, setShowAIStatusModal] = useState(false);
@@ -80,7 +86,7 @@ export default function IntelligentReports() {
     queryKey: ['availableKeywords'],
     queryFn: async () => {
       const response = await axios.get<{ keywords: KeywordOption[] }>(
-        `${API_BASE_URL}/api/reports/keywords-available`
+        `${API_BASE_URL}/api/intelligent-reports/keywords-available`
       );
       return response.data;
     },
@@ -90,11 +96,9 @@ export default function IntelligentReports() {
   const { data: aiStatusData } = useQuery({
     queryKey: ['aiStatus'],
     queryFn: async () => {
-      const response = await axios.get<{
-        ai_service_available: boolean;
-        models: AIModelStatus[];
-        recommendation: string;
-      }>(`${API_BASE_URL}/api/intelligent-reports/ai-status`);
+      const response = await axios.get<AIServiceStatus>(
+        `${API_BASE_URL}/api/intelligent-reports/ai-status`
+      );
       return response.data;
     },
   });
@@ -137,12 +141,12 @@ export default function IntelligentReports() {
       return;
     }
 
-    if (!reportObject.trim()) {
-      toast.error('Veuillez saisir l\'objet du rapport');
+    if (!reportTitle.trim()) {
+      toast.error('Veuillez saisir le titre du rapport');
       return;
     }
 
-    if (!aiStatusData?.ai_service_available) {
+    if (!aiStatusData?.ai_available) {
       toast.error('Service IA non disponible. Vérifiez la configuration.');
       return;
     }
@@ -155,43 +159,82 @@ export default function IntelligentReports() {
         {
           keyword_ids: selectedKeywords,
           days: periodDays,
-          report_object: reportObject,
+          report_title: reportTitle,
           include_web_analysis: includeWebAnalysis,
-          ai_model: aiModel,
           format: format,
         },
         {
-          responseType: format === 'pdf' ? 'blob' : 'text',
+          responseType: 'blob', // Important pour recevoir les fichiers binaires
         }
       );
 
-      if (format === 'pdf') {
-        // Télécharger le PDF intelligent
-        const blob = new Blob([response.data], { type: 'application/pdf' });
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `rapport_intelligent_${reportObject.substring(0, 30)}_${new Date().toISOString().split('T')[0]}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
+      // Télécharger le fichier
+      const blob = new Blob([response.data], { 
+        type: format === 'pdf' ? 'application/pdf' : 'text/html' 
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const timestamp = new Date().toISOString().split('T')[0];
+      link.download = `rapport_intelligent_${timestamp}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
 
-        toast.success('🤖 Rapport intelligent généré avec succès !');
-      } else {
-        // Ouvrir HTML dans nouvel onglet
-        const blob = new Blob([response.data], { type: 'text/html' });
-        const url = window.URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        toast.success('🤖 Rapport intelligent HTML généré !');
-      }
-    } catch (error) {
+      toast.success('🤖 Rapport intelligent généré avec succès !');
+    } catch (error: any) {
       console.error('Erreur génération rapport intelligent:', error);
-      toast.error('Erreur lors de la génération du rapport intelligent');
+      const errorMsg = error.response?.data?.detail || 'Erreur lors de la génération du rapport intelligent';
+      toast.error(errorMsg);
     } finally {
       setIsGenerating(false);
     }
   };
+
+  const handleGenerateExecutiveReport = async () => {
+  if (selectedKeywords.length === 0 || !reportTitle.trim()) {
+    toast.error('Veuillez sélectionner des mots-clés et saisir un titre');
+    return;
+  }
+
+  setIsGenerating(true);
+
+  try {
+    const response = await axios.post(
+      `${API_BASE_URL}/api/intelligent-reports/generate-executive`,
+      {
+        keyword_ids: selectedKeywords,
+        days: periodDays,
+        report_title: reportTitle,
+        format: format,
+      },
+      {
+        responseType: 'blob',
+      }
+    );
+
+    // Télécharger
+    const blob = new Blob([response.data], { 
+      type: format === 'pdf' ? 'application/pdf' : 'text/html' 
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `rapport_executif_${new Date().toISOString().split('T')[0]}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    toast.success('🎯 Rapport exécutif généré !');
+  } catch (error: any) {
+    console.error('Erreur:', error);
+    toast.error('Erreur lors de la génération du rapport exécutif');
+  } finally {
+    setIsGenerating(false);
+  }
+};
 
   const handlePreview = async () => {
     if (selectedKeywords.length === 0) {
@@ -202,15 +245,17 @@ export default function IntelligentReports() {
     try {
       const response = await axios.post<IntelligentReportPreview>(
         `${API_BASE_URL}/api/intelligent-reports/preview`,
-        selectedKeywords,
         {
-          params: { days: periodDays }
+          keyword_ids: selectedKeywords,
+          days: periodDays
         }
       );
       setPreviewData(response.data);
       setShowPreviewModal(true);
-    } catch (error) {
-      toast.error('Erreur lors de la prévisualisation');
+    } catch (error: any) {
+      console.error('Erreur prévisualisation:', error);
+      const errorMsg = error.response?.data?.detail || 'Erreur lors de la prévisualisation';
+      toast.error(errorMsg);
     }
   };
 
@@ -231,9 +276,9 @@ export default function IntelligentReports() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
           🤖 Rapports Intelligents IA
-          <Badge variant="primary" >
+          <Badge variant="primary">
             <Sparkles className="w-4 h-4 mr-1" />
             IA Souveraine
           </Badge>
@@ -244,7 +289,7 @@ export default function IntelligentReports() {
       </div>
 
       {/* Alerte statut IA */}
-      {aiStatusData && !aiStatusData.ai_service_available && (
+      {aiStatusData && !aiStatusData.ai_available && (
         <Alert type="warning">
           <Brain className="w-4 h-4" />
           <span>Service IA non disponible. {aiStatusData.recommendation}</span>
@@ -268,20 +313,20 @@ export default function IntelligentReports() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Configuration */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Objet du rapport */}
+            {/* Titre du rapport */}
             <Card>
               <div className="flex items-center space-x-3 mb-4">
                 <Target className="w-6 h-6 text-primary-500" />
                 <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Objet du rapport intelligent
+                  Titre du rapport intelligent
                 </h2>
               </div>
               
               <input
                 type="text"
-                value={reportObject}
-                onChange={(e) => setReportObject(e.target.value)}
-                placeholder="Ex: Analyse IA de l'opinion publique sur le projet X..."
+                value={reportTitle}
+                onChange={(e) => setReportTitle(e.target.value)}
+                placeholder="Ex: Analyse IA de l'opinion publique Q4 2024"
                 className="input"
                 maxLength={200}
               />
@@ -374,24 +419,6 @@ export default function IntelligentReports() {
                     ))}
                   </div>
                 </div>
-
-                {/* Modèle IA */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <Cpu className="w-4 h-4 inline mr-1" />
-                    Modèle IA
-                  </label>
-                  <select
-                    value={aiModel}
-                    onChange={(e) => setAiModel(e.target.value)}
-                    className="input"
-                  >
-                    <option value="mistral:7b">Mistral 7B (Recommandé)</option>
-                    <option value="llama2:7b">Llama 2 7B</option>
-                    <option value="codellama:7b">CodeLlama 7B</option>
-                    <option value="neural-chat:7b">Neural Chat 7B</option>
-                  </select>
-                </div>
               </div>
 
               {/* Options avancées */}
@@ -465,10 +492,10 @@ export default function IntelligentReports() {
           {/* Résumé et actions */}
           <div className="space-y-6">
             <Card className="sticky top-6">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
                 🤖 Résumé Rapport IA
-                {aiStatusData?.ai_service_available && (
-                  <Badge variant="success" size="sm" >
+                {aiStatusData?.ai_available && (
+                  <Badge variant="success" size="sm">
                     <Activity className="w-3 h-3 mr-1" />
                     IA Active
                   </Badge>
@@ -477,9 +504,9 @@ export default function IntelligentReports() {
 
               <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Objet</p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Titre</p>
                   <p className="font-semibold text-gray-900 dark:text-white text-sm">
-                    {reportObject || 'Non renseigné'}
+                    {reportTitle || 'Non renseigné'}
                   </p>
                 </div>
 
@@ -509,10 +536,6 @@ export default function IntelligentReports() {
                       <span className="font-medium">{periodDays} jours</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Modèle IA:</span>
-                      <span className="font-medium">{aiModel}</span>
-                    </div>
-                    <div className="flex justify-between">
                       <span>Web Analysis:</span>
                       <span className="font-medium">{includeWebAnalysis ? '✅ Oui' : '❌ Non'}</span>
                     </div>
@@ -535,12 +558,39 @@ export default function IntelligentReports() {
                 </button>
 
                 <button
+                  onClick={handleGenerateExecutiveReport}
+                  disabled={
+                    selectedKeywords.length === 0 ||
+                    !reportTitle.trim() ||
+                    isGenerating ||
+                    !aiStatusData?.ai_available
+                  }
+                  className="btn w-full flex items-center justify-center space-x-2"
+                  style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white'
+                  }}
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Génération...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Target className="w-4 h-4" />
+                      <span>Rapport Exécutif (DG)</span>
+                    </>
+                  )}
+                </button>
+
+                <button
                   onClick={handleGenerateReport}
                   disabled={
                     selectedKeywords.length === 0 ||
-                    !reportObject.trim() ||
+                    !reportTitle.trim() ||
                     isGenerating ||
-                    !aiStatusData?.ai_service_available
+                    !aiStatusData?.ai_available
                   }
                   className="btn btn-primary w-full flex items-center justify-center space-x-2"
                 >
@@ -582,157 +632,6 @@ export default function IntelligentReports() {
         </div>
       )}
 
-      {/* Tab Statut IA */}
-      {activeTab === 'ai-status' && aiStatusData && (
-        <div className="space-y-6">
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Statut du Service IA
-              </h2>
-              <Badge variant={aiStatusData.ai_service_available ? 'success' : 'danger'}>
-                {aiStatusData.ai_service_available ? '🟢 Actif' : '🔴 Inactif'}
-              </Badge>
-            </div>
-
-            <p className="text-gray-700 dark:text-gray-300 mb-6">
-              {aiStatusData.recommendation}
-            </p>
-
-            {aiStatusData.models && aiStatusData.models.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {aiStatusData.models.map((model, index) => (
-                  <div key={index} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-gray-900 dark:text-white">
-                        {model.name}
-                      </h4>
-                      <Badge variant={model.available ? 'success' : 'danger'} size="sm">
-                        {model.available ? '✅' : '❌'}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                      {model.description}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-500">
-                      Performance: {model.performance}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <Alert type="warning">
-                Aucun modèle IA détecté. Vérifiez l'installation d'Ollama.
-              </Alert>
-            )}
-          </Card>
-        </div>
-      )}
-
-      {/* Tab Capacités */}
-      {activeTab === 'capabilities' && capabilitiesData && (
-        <div className="space-y-6">
-          <Card>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              Capacités d'Analyse IA
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {capabilitiesData.analysis_types?.map((capability: AICapability, index: number) => (
-                <div key={index} className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                  <h4 className="font-semibold text-gray-900 dark:text-white mb-2">
-                    {capability.name}
-                  </h4>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                    {capability.description}
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    {capability.features.map((feature, fIndex) => (
-                      <Badge key={fIndex} variant="primary" size="sm">
-                        {feature}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-              <h3 className="font-semibold text-blue-900 dark:text-blue-200 mb-2">
-                🌐 Analyse Web Avancée
-              </h3>
-              <p className="text-sm text-blue-800 dark:text-blue-300 mb-3">
-                {capabilitiesData.web_analysis?.description}
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h4 className="font-medium text-blue-900 dark:text-blue-200 mb-2">Fonctionnalités:</h4>
-                  <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
-                    {capabilitiesData.web_analysis?.features?.map((feature: string, index: number) => (
-                      <li key={index}>• {feature}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="font-medium text-blue-900 dark:text-blue-200 mb-2">Limitations:</h4>
-                  <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
-                    {capabilitiesData.web_analysis?.limitations?.map((limitation: string, index: number) => (
-                      <li key={index}>• {limitation}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Tab Exemples */}
-      {activeTab === 'examples' && examplesData && (
-        <div className="space-y-6">
-          <Card>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              Exemples d'Analyses IA
-            </h2>
-
-            <div className="space-y-6">
-              {Object.entries(examplesData.sample_analyses || {}).map(([type, example]: [string, any]) => (
-                <div key={type} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                  <h4 className="font-semibold text-gray-900 dark:text-white mb-2 capitalize">
-                    {type.replace('_', ' ')}
-                  </h4>
-                  <div className="space-y-2">
-                    <div>
-                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Input:</span>
-                      <p className="text-sm text-gray-700 dark:text-gray-300 italic">
-                        "{example.input}"
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Analyse IA:</span>
-                      <p className="text-sm text-gray-900 dark:text-white">
-                        {example.output}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mt-6">
-              <h3 className="font-semibold text-green-900 dark:text-green-200 mb-2">
-                💡 Insights IA Avancés
-              </h3>
-              <ul className="text-sm text-green-800 dark:text-green-300 space-y-1">
-                {examplesData.ai_insights_examples?.map((insight: string, index: number) => (
-                  <li key={index}>• {insight}</li>
-                ))}
-              </ul>
-            </div>
-          </Card>
-        </div>
-      )}
-
       {/* Modal de prévisualisation intelligent */}
       {showPreviewModal && previewData && (
         <Modal
@@ -767,39 +666,29 @@ export default function IntelligentReports() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <p className="text-sm text-blue-600 dark:text-blue-400 mb-1">
-                  Modèles IA disponibles
-                </p>
-                <div className="space-y-1">
-                  {previewData.ai_models_available.map((model, index) => (
-                    <div key={index} className="text-sm text-blue-800 dark:text-blue-300">
-                      ✓ {model}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
-                <p className="text-sm text-purple-600 dark:text-purple-400 mb-1">
-                  Temps de traitement estimé
-                </p>
-                <p className="text-lg font-bold text-purple-900 dark:text-purple-200">
-                  ⏱️ {previewData.processing_time_estimate}
-                </p>
-              </div>
+            <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg">
+              <p className="text-sm text-purple-600 dark:text-purple-400 mb-1">
+                Temps de traitement estimé
+              </p>
+              <p className="text-lg font-bold text-purple-900 dark:text-purple-200">
+                ⏱️ {previewData.processing_time_estimate}
+              </p>
+              <p className="text-sm text-purple-700 dark:text-purple-300 mt-2">
+                Confiance: {(previewData.confidence_score * 100).toFixed(0)}%
+              </p>
             </div>
 
-            {previewData.risk_level_preview && (
-              <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">
-                  Niveau de risque préliminaire (IA)
+            {previewData.risk_indicators && previewData.risk_indicators.length > 0 && (
+              <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+                <p className="text-sm font-medium text-yellow-900 dark:text-yellow-200 mb-2">
+                  <AlertTriangle className="w-4 h-4 inline mr-1" />
+                  Indicateurs de risque
                 </p>
-                <p className={`text-lg font-bold ${getRiskColor(previewData.risk_level_preview)}`}>
-                  <Shield className="w-5 h-5 inline mr-2" />
-                  {previewData.risk_level_preview}
-                </p>
+                <ul className="text-sm text-yellow-800 dark:text-yellow-300 space-y-1">
+                  {previewData.risk_indicators.map((indicator, idx) => (
+                    <li key={idx}>• {indicator}</li>
+                  ))}
+                </ul>
               </div>
             )}
 

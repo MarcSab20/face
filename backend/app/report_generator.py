@@ -1,6 +1,6 @@
 """
-Générateur de Rapports Intelligents avec IA Souveraine
-Génère des rapports complets basés sur l'analyse IA sans dépendance externe
+Générateur de Rapports Exécutifs Intelligents
+Version Dirigeant - Synthèse Narrative et Actionnable
 """
 
 import logging
@@ -13,947 +13,830 @@ import json
 import asyncio
 from io import BytesIO
 
-from app.ai_service import IntelligentAnalysisAgent, AnalysisContext
+from app.ai_service import IntelligentAnalysisAgent, AnalysisContext, SovereignLLMService
 from app.models import Keyword, Mention
 
 logger = logging.getLogger(__name__)
 
 
 class IntelligentReportGenerator:
-    """Générateur de rapports avec IA souveraine"""
+    """Générateur de rapports exécutifs pour décideurs"""
     
     def __init__(self, db: Session):
         self.db = db
         self.ai_agent = IntelligentAnalysisAgent()
+        self.llm_service = SovereignLLMService()
     
-    async def generate_complete_report(
+    async def generate_executive_report(
         self,
         keyword_ids: List[int],
         days: int = 30,
         report_title: str = "",
-        include_web_analysis: bool = True,
         format_type: str = "pdf"
     ) -> Dict:
-        """Générer un rapport complet avec analyse IA"""
+        """Générer un rapport exécutif narratif"""
         
-        # 1. Valider les paramètres
-        keywords = self.db.query(Keyword).filter(Keyword.id.in_(keyword_ids)).all()
-        if not keywords:
-            raise ValueError("Aucun mot-clé trouvé")
+        logger.info(f"🎯 Génération rapport exécutif: {len(keyword_ids)} mots-clés, {days} jours")
         
-        keyword_names = [kw.keyword for kw in keywords]
-        since_date = datetime.utcnow() - timedelta(days=days)
+        # 1. Récupérer et lire TOUS les contenus
+        all_contents = await self._read_all_contents(keyword_ids, days)
         
-        logger.info(f"Génération rapport IA: {len(keywords)} mots-clés, {days} jours")
+        # 2. Classifier les contenus par sentiment
+        classified_contents = await self._classify_contents_by_sentiment(all_contents)
         
-        # 2. Récupérer les données de base
-        base_data = await self._collect_base_data(keyword_ids, since_date)
+        # 3. Générer des résumés intelligents par catégorie
+        summaries = await self._generate_intelligent_summaries(classified_contents)
         
-        # 3. Préparer le contexte d'analyse
-        analysis_context = self._prepare_analysis_context(
-            base_data, keyword_names, days
+        # 4. Créer la synthèse exécutive narrative
+        executive_synthesis = await self._create_executive_synthesis(
+            summaries, classified_contents, keyword_ids, days
         )
         
-        # 4. Lancer l'analyse IA
-        ai_analysis = await self.ai_agent.generate_intelligent_report(
-            analysis_context, 
-            self.db if include_web_analysis else None
+        # 5. Identifier les messages clés et tendances
+        key_messages = await self._extract_key_messages(all_contents, classified_contents)
+        
+        # 6. Générer les recommandations stratégiques
+        strategic_recommendations = await self._generate_strategic_recommendations(
+            executive_synthesis, key_messages, classified_contents
         )
         
-        # 5. Compiler le rapport final
+        # 7. Compiler le rapport final
         report_data = {
             'metadata': {
-                'title': report_title or f"Rapport IA - {', '.join(keyword_names)}",
-                'keywords': keyword_names,
-                'keyword_ids': keyword_ids,
+                'title': report_title or "Rapport Exécutif - Analyse de Réputation",
+                'keywords': [self._get_keyword_name(kid) for kid in keyword_ids],
                 'period_days': days,
                 'generated_at': datetime.utcnow(),
-                'include_web_analysis': include_web_analysis,
-                'format': format_type
+                'format': format_type,
+                'total_contents_analyzed': len(all_contents)
             },
-            'summary': {
-                'total_mentions': len(base_data['mentions']),
-                'sources_count': len(base_data['sources_distribution']),
-                'period_analyzed': f"{days} jours",
-                'web_content_analyzed': len(analysis_context.web_content) if analysis_context.web_content else 0
-            },
-            'base_data': base_data,
-            'ai_analysis': ai_analysis,
-            'visualizations': self._prepare_visualizations(base_data, ai_analysis),
-            'actionable_insights': self._extract_actionable_insights(ai_analysis),
-            'executive_summary': self._generate_executive_summary(base_data, ai_analysis)
+            'executive_synthesis': executive_synthesis,
+            'content_summaries': summaries,
+            'key_messages': key_messages,
+            'strategic_recommendations': strategic_recommendations,
+            'classified_contents': classified_contents,
+            'statistics': self._generate_executive_statistics(all_contents, classified_contents)
         }
         
-        logger.info("Rapport IA généré avec succès")
+        logger.info("✅ Rapport exécutif généré avec succès")
         return report_data
     
-    async def _collect_base_data(self, keyword_ids: List[int], since_date: datetime) -> Dict:
-        """Collecter les données de base depuis la base de données"""
+    async def _read_all_contents(self, keyword_ids: List[int], days: int) -> List[Dict]:
+        """Lire TOUS les contenus complets des mentions"""
         
-        # Récupérer toutes les mentions
-        mentions_query = self.db.query(Mention).filter(
+        since_date = datetime.utcnow() - timedelta(days=days)
+        
+        mentions = self.db.query(Mention).filter(
             Mention.keyword_id.in_(keyword_ids),
             Mention.published_at >= since_date
-        ).order_by(desc(Mention.published_at))
+        ).order_by(desc(Mention.published_at)).all()
         
-        mentions = mentions_query.all()
+        logger.info(f"📖 Lecture de {len(mentions)} contenus complets...")
         
-        # Convertir en dictionnaires pour l'IA
-        mentions_data = []
+        all_contents = []
+        
         for mention in mentions:
-            mentions_data.append({
+            # Construire le texte complet
+            full_text = f"{mention.title}\n\n{mention.content}"
+            
+            content_data = {
                 'id': mention.id,
                 'title': mention.title,
-                'content': mention.content,
+                'full_content': mention.content,
+                'full_text': full_text,
                 'author': mention.author,
                 'source': mention.source,
                 'source_url': mention.source_url,
-                'sentiment': mention.sentiment,
-                'engagement_score': mention.engagement_score,
                 'published_at': mention.published_at.isoformat() if mention.published_at else None,
-                'collected_at': mention.collected_at.isoformat(),
+                'engagement_score': mention.engagement_score,
+                'original_sentiment': mention.sentiment,
                 'metadata': json.loads(mention.mention_metadata) if mention.mention_metadata else {}
-            })
-        
-        # Analyser les distributions
-        sentiment_distribution = self._calculate_sentiment_distribution(mentions)
-        sources_distribution = self._calculate_sources_distribution(mentions)
-        temporal_distribution = self._calculate_temporal_distribution(mentions)
-        engagement_stats = self._calculate_engagement_stats(mentions)
-        top_authors = self._calculate_top_authors(mentions)
-        
-        return {
-            'mentions': mentions_data,
-            'sentiment_distribution': sentiment_distribution,
-            'sources_distribution': sources_distribution,
-            'temporal_distribution': temporal_distribution,
-            'engagement_stats': engagement_stats,
-            'top_authors': top_authors,
-            'geographic_hints': self._extract_geographic_hints(mentions),
-            'content_categories': self._categorize_content(mentions_data)
-        }
-    
-    def _prepare_analysis_context(self, base_data: Dict, keyword_names: List[str], days: int) -> AnalysisContext:
-        """Préparer le contexte pour l'analyse IA"""
-        
-        # Préparer les données temporelles
-        time_trends = []
-        for date_str, count in base_data['temporal_distribution'].items():
-            time_trends.append({
-                'date': date_str,
-                'count': count
-            })
-        
-        time_trends.sort(key=lambda x: x['date'])
-        
-        # Préparer les données d'influenceurs
-        influencers_data = []
-        for author_data in base_data['top_authors'][:20]:  # Top 20
-            sentiment_score = self._calculate_author_sentiment_score(
-                author_data['author'], base_data['mentions']
-            )
+            }
             
-            influencers_data.append({
-                'author': author_data['author'],
-                'source': author_data['main_source'],
-                'mention_count': author_data['mentions_count'],
-                'total_engagement': author_data['total_engagement'],
-                'avg_engagement': author_data['avg_engagement'],
-                'sentiment_score': sentiment_score
-            })
+            all_contents.append(content_data)
         
-        return AnalysisContext(
-            mentions=base_data['mentions'],
-            keywords=keyword_names,
-            period_days=days,
-            total_mentions=len(base_data['mentions']),
-            sentiment_distribution=base_data['sentiment_distribution'],
-            top_sources=base_data['sources_distribution'],
-            engagement_stats=base_data['engagement_stats'],
-            geographic_data=[],  # Sera enrichi si nécessaire
-            influencers_data=influencers_data,
-            time_trends=time_trends,
-            web_content=[]  # Sera enrichi par l'IA
-        )
+        logger.info(f"✅ {len(all_contents)} contenus lus")
+        return all_contents
     
-    def _calculate_sentiment_distribution(self, mentions: List) -> Dict[str, int]:
-        """Calculer la distribution des sentiments"""
-        distribution = {'positive': 0, 'neutral': 0, 'negative': 0, 'unknown': 0}
+    async def _classify_contents_by_sentiment(self, contents: List[Dict]) -> Dict[str, List[Dict]]:
+        """Classifier intelligemment les contenus par sentiment réel"""
         
-        for mention in mentions:
-            sentiment = mention.sentiment or 'unknown'
-            if sentiment in distribution:
-                distribution[sentiment] += 1
+        logger.info("🤖 Classification IA des contenus par sentiment...")
+        
+        classified = {
+            'very_positive': [],
+            'positive': [],
+            'neutral': [],
+            'negative': [],
+            'very_negative': []
+        }
+        
+        for content in contents:
+            # Analyser le sentiment réel avec l'IA
+            sentiment_analysis = await self._analyze_content_sentiment(content['full_text'])
+            
+            content['ai_sentiment'] = sentiment_analysis['category']
+            content['ai_sentiment_score'] = sentiment_analysis['score']
+            content['ai_sentiment_reasoning'] = sentiment_analysis['reasoning']
+            
+            # Classer dans la bonne catégorie
+            classified[sentiment_analysis['category']].append(content)
+        
+        logger.info(f"✅ Classification terminée: {len(classified['very_positive'])} très positifs, "
+                   f"{len(classified['positive'])} positifs, {len(classified['neutral'])} neutres, "
+                   f"{len(classified['negative'])} négatifs, {len(classified['very_negative'])} très négatifs")
+        
+        return classified
+    
+    async def _analyze_content_sentiment(self, text: str) -> Dict:
+        """Analyser le sentiment réel d'un contenu avec l'IA"""
+        
+        if not self.llm_service.is_available():
+            # Fallback simple
+            return self._simple_sentiment_analysis(text)
+        
+        prompt = f"""
+Analyse le sentiment de ce contenu et évalue s'il est positif, négatif ou neutre 
+pour l'image d'une organisation/personnalité publique.
+
+CONTENU À ANALYSER:
+{text[:2000]}
+
+Réponds UNIQUEMENT avec ce format JSON:
+{{
+    "category": "very_positive" | "positive" | "neutral" | "negative" | "very_negative",
+    "score": <-10 à +10>,
+    "reasoning": "<explication courte en 1-2 phrases>"
+}}
+
+Sois précis et objectif. Base-toi sur le ton, les mots utilisés, et l'intention apparente.
+"""
+        
+        try:
+            context = {'mentions': [{'content': text}], 'keywords': [], 'period_days': 1}
+            response = await self.llm_service.analyze_with_local_llm(prompt, context)
+            
+            # Parser la réponse JSON
+            import re
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+                return result
             else:
-                distribution['unknown'] += 1
-        
-        return distribution
+                return self._simple_sentiment_analysis(text)
+                
+        except Exception as e:
+            logger.warning(f"Erreur analyse sentiment IA: {e}")
+            return self._simple_sentiment_analysis(text)
     
-    def _calculate_sources_distribution(self, mentions: List) -> Dict[str, int]:
-        """Calculer la distribution des sources"""
-        return dict(Counter(mention.source for mention in mentions).most_common())
-    
-    def _calculate_temporal_distribution(self, mentions: List) -> Dict[str, int]:
-        """Calculer la distribution temporelle"""
-        daily_counts = {}
+    def _simple_sentiment_analysis(self, text: str) -> Dict:
+        """Analyse de sentiment simple (fallback)"""
         
-        for mention in mentions:
-            if mention.published_at:
-                date_key = mention.published_at.date().isoformat()
-                daily_counts[date_key] = daily_counts.get(date_key, 0) + 1
+        text_lower = text.lower()
         
-        return daily_counts
-    
-    def _calculate_engagement_stats(self, mentions: List) -> Dict[str, float]:
-        """Calculer les statistiques d'engagement"""
-        engagements = [mention.engagement_score for mention in mentions if mention.engagement_score]
+        # Mots fortement positifs
+        very_positive_words = ['excellent', 'extraordinaire', 'remarquable', 'brillant', 'génial', 
+                               'succès', 'victoire', 'triomphe', 'félicitations', 'innovation']
         
-        if not engagements:
-            return {'total': 0, 'average': 0, 'max': 0, 'min': 0}
+        # Mots positifs
+        positive_words = ['bon', 'bien', 'positif', 'amélioration', 'progrès', 'efficace',
+                         'satisfaisant', 'apprécié', 'soutien', 'reconnaissance']
+        
+        # Mots négatifs
+        negative_words = ['mauvais', 'problème', 'échec', 'erreur', 'difficulté', 'critique',
+                         'insuffisant', 'décevant', 'préoccupant', 'insatisfaction']
+        
+        # Mots fortement négatifs
+        very_negative_words = ['scandale', 'catastrophe', 'désastre', 'corruption', 'fraude',
+                              'crise', 'effondrement', 'inacceptable', 'honte', 'tragédie']
+        
+        # Compter les occurrences
+        very_pos_count = sum(1 for word in very_positive_words if word in text_lower)
+        pos_count = sum(1 for word in positive_words if word in text_lower)
+        neg_count = sum(1 for word in negative_words if word in text_lower)
+        very_neg_count = sum(1 for word in very_negative_words if word in text_lower)
+        
+        # Calculer le score
+        score = (very_pos_count * 2 + pos_count) - (neg_count + very_neg_count * 2)
+        
+        # Déterminer la catégorie
+        if score >= 3:
+            category = 'very_positive'
+            reasoning = "Ton très positif avec de nombreux termes élogieux"
+        elif score >= 1:
+            category = 'positive'
+            reasoning = "Ton globalement positif"
+        elif score <= -3:
+            category = 'very_negative'
+            reasoning = "Ton très négatif avec termes critiques"
+        elif score <= -1:
+            category = 'negative'
+            reasoning = "Ton globalement négatif"
+        else:
+            category = 'neutral'
+            reasoning = "Ton neutre et factuel"
         
         return {
-            'total': sum(engagements),
-            'average': sum(engagements) / len(engagements),
-            'max': max(engagements),
-            'min': min(engagements),
-            'count': len(engagements)
+            'category': category,
+            'score': score,
+            'reasoning': reasoning
         }
     
-    def _calculate_top_authors(self, mentions: List) -> List[Dict]:
-        """Calculer les top auteurs"""
-        author_stats = {}
+    async def _generate_intelligent_summaries(self, classified_contents: Dict[str, List[Dict]]) -> Dict:
+        """Générer des résumés intelligents pour chaque catégorie"""
         
-        for mention in mentions:
-            author = mention.author
-            if author not in author_stats:
-                author_stats[author] = {
-                    'author': author,
-                    'mentions_count': 0,
-                    'total_engagement': 0,
-                    'sources': set(),
-                    'sentiments': []
+        logger.info("📝 Génération des résumés intelligents par catégorie...")
+        
+        summaries = {}
+        
+        for category, contents in classified_contents.items():
+            if not contents:
+                summaries[category] = {
+                    'count': 0,
+                    'summary': "Aucun contenu dans cette catégorie.",
+                    'key_themes': [],
+                    'representative_excerpts': []
                 }
+                continue
             
-            stats = author_stats[author]
-            stats['mentions_count'] += 1
-            stats['total_engagement'] += mention.engagement_score
-            stats['sources'].add(mention.source)
-            if mention.sentiment:
-                stats['sentiments'].append(mention.sentiment)
+            # Générer un résumé IA de cette catégorie
+            summary_text = await self._summarize_category(category, contents)
+            
+            # Extraire les thèmes clés
+            key_themes = self._extract_key_themes(contents)
+            
+            # Sélectionner des extraits représentatifs
+            excerpts = self._select_representative_excerpts(contents[:5])  # Top 5
+            
+            summaries[category] = {
+                'count': len(contents),
+                'summary': summary_text,
+                'key_themes': key_themes,
+                'representative_excerpts': excerpts
+            }
         
-        # Formater les résultats
-        top_authors = []
-        for author, stats in author_stats.items():
-            if stats['mentions_count'] >= 2:  # Au moins 2 mentions
-                top_authors.append({
-                    'author': author,
-                    'mentions_count': stats['mentions_count'],
-                    'total_engagement': stats['total_engagement'],
-                    'avg_engagement': stats['total_engagement'] / stats['mentions_count'],
-                    'sources_count': len(stats['sources']),
-                    'main_source': list(stats['sources'])[0] if stats['sources'] else 'unknown',
-                    'positive_ratio': stats['sentiments'].count('positive') / len(stats['sentiments']) if stats['sentiments'] else 0
-                })
-        
-        # Trier par engagement total
-        top_authors.sort(key=lambda x: x['total_engagement'], reverse=True)
-        return top_authors
+        return summaries
     
-    def _calculate_author_sentiment_score(self, author: str, mentions: List[Dict]) -> float:
-        """Calculer le score de sentiment pour un auteur"""
-        author_mentions = [m for m in mentions if m['author'] == author]
+    async def _summarize_category(self, category: str, contents: List[Dict]) -> str:
+        """Résumer intelligemment une catégorie de contenus"""
         
-        if not author_mentions:
-            return 50.0  # Neutre par défaut
+        if not self.llm_service.is_available():
+            return self._simple_category_summary(category, contents)
         
-        sentiments = [m['sentiment'] for m in author_mentions if m['sentiment']]
+        # Préparer le texte à résumer (limiter la taille)
+        texts_sample = []
+        for content in contents[:10]:  # Max 10 contenus
+            texts_sample.append(f"• {content['title']}: {content['full_content'][:300]}")
         
-        if not sentiments:
-            return 50.0
+        combined_text = '\n'.join(texts_sample)
         
-        positive_count = sentiments.count('positive')
-        negative_count = sentiments.count('negative')
-        total_count = len(sentiments)
-        
-        # Score sur 100 (0 = très négatif, 100 = très positif)
-        if total_count == 0:
-            return 50.0
-        
-        positive_ratio = positive_count / total_count
-        negative_ratio = negative_count / total_count
-        
-        # Formule: base 50 + écart positif - écart négatif
-        score = 50 + (positive_ratio * 50) - (negative_ratio * 50)
-        return max(0, min(100, score))
-    
-    def _extract_geographic_hints(self, mentions: List) -> List[Dict]:
-        """Extraire des indices géographiques du contenu"""
-        # Mots-clés géographiques simples
-        geo_keywords = {
-            'france': 'FR', 'paris': 'FR', 'lyon': 'FR', 'marseille': 'FR',
-            'usa': 'US', 'america': 'US', 'new york': 'US', 'california': 'US',
-            'uk': 'GB', 'london': 'GB', 'england': 'GB',
-            'germany': 'DE', 'berlin': 'DE', 'allemagne': 'DE',
-            'canada': 'CA', 'toronto': 'CA', 'montreal': 'CA',
-            'japan': 'JP', 'tokyo': 'JP', 'japon': 'JP',
-            'china': 'CN', 'beijing': 'CN', 'chine': 'CN'
+        category_labels = {
+            'very_positive': 'TRÈS POSITIFS',
+            'positive': 'POSITIFS',
+            'neutral': 'NEUTRES',
+            'negative': 'NÉGATIFS',
+            'very_negative': 'TRÈS NÉGATIFS'
         }
         
-        geo_mentions = {}
+        prompt = f"""
+Tu es un analyste senior qui rédige un résumé exécutif pour un directeur général.
+
+Voici {len(contents)} contenus classés comme {category_labels[category]}:
+
+{combined_text}
+
+Rédige un paragraphe de synthèse (3-5 phrases) qui explique:
+1. Ce que disent ces contenus (les faits, pas les chiffres)
+2. Les messages principaux qui ressortent
+3. L'impact potentiel sur la réputation
+
+Sois factuel, concis et orienté décision. Évite le jargon technique.
+Écris à la 3e personne, ton professionnel.
+"""
         
-        for mention in mentions:
-            content_lower = f"{mention.title} {mention.content}".lower()
+        try:
+            context = {'mentions': contents[:5], 'keywords': [], 'period_days': 1}
+            summary = await self.llm_service.analyze_with_local_llm(prompt, context)
+            return summary.strip()
+        except Exception as e:
+            logger.warning(f"Erreur résumé catégorie: {e}")
+            return self._simple_category_summary(category, contents)
+    
+    def _simple_category_summary(self, category: str, contents: List[Dict]) -> str:
+        """Résumé simple d'une catégorie (fallback)"""
+        
+        count = len(contents)
+        sources = list(set(c['source'] for c in contents))
+        
+        category_descriptions = {
+            'very_positive': f"{count} contenus très positifs détectés, principalement sur {', '.join(sources[:3])}. "
+                            f"Ces mentions mettent en avant des aspects très favorables et utilisent un ton élogieux.",
             
-            for geo_term, country_code in geo_keywords.items():
-                if geo_term in content_lower:
-                    if country_code not in geo_mentions:
-                        geo_mentions[country_code] = 0
-                    geo_mentions[country_code] += 1
+            'positive': f"{count} contenus positifs identifiés sur {', '.join(sources[:3])}. "
+                       f"Ces mentions présentent une image généralement favorable avec des aspects appréciés.",
+            
+            'neutral': f"{count} contenus neutres recensés, essentiellement sur {', '.join(sources[:3])}. "
+                      f"Ces mentions sont factuelles sans orientation positive ou négative marquée.",
+            
+            'negative': f"{count} contenus négatifs repérés sur {', '.join(sources[:3])}. "
+                       f"Ces mentions expriment des critiques ou soulèvent des problèmes préoccupants.",
+            
+            'very_negative': f"{count} contenus très négatifs détectés sur {', '.join(sources[:3])}. "
+                            f"Ces mentions sont fortement critiques et peuvent avoir un impact significatif sur la réputation."
+        }
         
-        # Convertir en liste triée
-        geo_data = []
-        for country_code, count in sorted(geo_mentions.items(), key=lambda x: x[1], reverse=True):
-            geo_data.append({
-                'country_code': country_code,
-                'mentions_count': count
+        return category_descriptions.get(category, f"{count} contenus dans cette catégorie.")
+    
+    def _extract_key_themes(self, contents: List[Dict]) -> List[str]:
+        """Extraire les thèmes clés des contenus"""
+        
+        # Mots-clés fréquents (approche simple)
+        all_words = []
+        
+        for content in contents:
+            words = content['full_text'].lower().split()
+            # Filtrer les mots courts et communs
+            filtered_words = [
+                w for w in words 
+                if len(w) > 4 and w not in ['avoir', 'être', 'faire', 'dire', 'pouvoir', 'devoir']
+            ]
+            all_words.extend(filtered_words)
+        
+        # Compter les plus fréquents
+        word_counts = Counter(all_words)
+        top_words = [word for word, count in word_counts.most_common(10) if count > 1]
+        
+        return top_words[:5]  # Top 5 thèmes
+    
+    def _select_representative_excerpts(self, contents: List[Dict]) -> List[Dict]:
+        """Sélectionner des extraits représentatifs"""
+        
+        excerpts = []
+        
+        for content in contents[:3]:  # Max 3 extraits
+            # Prendre un extrait significatif du contenu
+            excerpt_text = content['full_content'][:250] + "..."
+            
+            excerpts.append({
+                'title': content['title'],
+                'excerpt': excerpt_text,
+                'source': content['source'],
+                'url': content['source_url'],
+                'date': content['published_at']
             })
         
-        return geo_data[:10]  # Top 10 pays
+        return excerpts
     
-    def _categorize_content(self, mentions: List[Dict]) -> Dict[str, int]:
-        """Catégoriser le contenu par thèmes"""
-        categories = {
-            'actualité': ['news', 'breaking', 'actualité', 'info', 'journal'],
-            'opinion': ['opinion', 'avis', 'pense', 'crois', 'selon moi'],
-            'analyse': ['analyse', 'étude', 'rapport', 'recherche', 'data'],
-            'promotion': ['promo', 'offre', 'discount', 'solde', 'achat'],
-            'service client': ['problème', 'bug', 'aide', 'support', 'sav'],
-            'événement': ['événement', 'event', 'conférence', 'salon', 'meeting']
-        }
+    async def _create_executive_synthesis(
+        self, 
+        summaries: Dict, 
+        classified_contents: Dict, 
+        keyword_ids: List[int], 
+        days: int
+    ) -> Dict:
+        """Créer la synthèse exécutive narrative"""
         
-        category_counts = {cat: 0 for cat in categories.keys()}
-        category_counts['autre'] = 0
+        logger.info("🎯 Création de la synthèse exécutive...")
         
-        for mention in mentions:
-            content_lower = f"{mention['title']} {mention['content']}".lower()
-            
-            categorized = False
-            for category, keywords in categories.items():
-                if any(keyword in content_lower for keyword in keywords):
-                    category_counts[category] += 1
-                    categorized = True
-                    break
-            
-            if not categorized:
-                category_counts['autre'] += 1
+        total_contents = sum(len(contents) for contents in classified_contents.values())
         
-        return category_counts
-    
-    def _prepare_visualizations(self, base_data: Dict, ai_analysis: Dict) -> Dict:
-        """Préparer les données de visualisation"""
+        # Compter par catégorie
+        very_pos = len(classified_contents['very_positive'])
+        pos = len(classified_contents['positive'])
+        neu = len(classified_contents['neutral'])
+        neg = len(classified_contents['negative'])
+        very_neg = len(classified_contents['very_negative'])
         
-        visualizations = {
-            'sentiment_chart': {
-                'type': 'pie',
-                'data': base_data['sentiment_distribution'],
-                'title': 'Distribution des Sentiments'
-            },
-            'sources_chart': {
-                'type': 'bar',
-                'data': dict(list(base_data['sources_distribution'].items())[:10]),
-                'title': 'Top 10 Sources'
-            },
-            'timeline_chart': {
-                'type': 'line',
-                'data': base_data['temporal_distribution'],
-                'title': 'Évolution Temporelle'
-            },
-            'engagement_chart': {
-                'type': 'histogram',
-                'data': self._prepare_engagement_histogram(base_data['mentions']),
-                'title': 'Distribution de l\'Engagement'
-            }
-        }
+        # Déterminer la tonalité générale
+        positive_total = very_pos + pos
+        negative_total = neg + very_neg
         
-        # Ajouter les graphiques IA si disponibles
-        if 'trends' in ai_analysis:
-            trends_data = ai_analysis['trends'].get('patterns', {})
-            if trends_data.get('peaks'):
-                visualizations['peaks_chart'] = {
-                    'type': 'scatter',
-                    'data': trends_data['peaks'],
-                    'title': 'Pics d\'Activité Détectés'
-                }
-        
-        return visualizations
-    
-    def _prepare_engagement_histogram(self, mentions: List[Dict]) -> List[Dict]:
-        """Préparer l'histogramme d'engagement"""
-        engagements = [m['engagement_score'] for m in mentions if m['engagement_score'] > 0]
-        
-        if not engagements:
-            return []
-        
-        # Créer des bins
-        max_engagement = max(engagements)
-        bin_size = max_engagement / 10 if max_engagement > 0 else 1
-        
-        bins = []
-        for i in range(10):
-            min_val = i * bin_size
-            max_val = (i + 1) * bin_size
-            count = sum(1 for eng in engagements if min_val <= eng < max_val)
-            
-            bins.append({
-                'range': f"{int(min_val)}-{int(max_val)}",
-                'count': count
-            })
-        
-        return bins
-    
-    def _extract_actionable_insights(self, ai_analysis: Dict) -> List[Dict]:
-        """Extraire les insights actionnables de l'analyse IA"""
-        insights = []
-        
-        # Insights de sentiment
-        if 'sentiment' in ai_analysis:
-            sentiment_insights = ai_analysis['sentiment'].get('insights', [])
-            for insight in sentiment_insights:
-                insights.append({
-                    'category': 'sentiment',
-                    'priority': 'high' if 'critique' in insight.lower() else 'medium',
-                    'message': insight,
-                    'action': self._suggest_action_for_sentiment_insight(insight)
-                })
-        
-        # Insights d'influenceurs
-        if 'influencers' in ai_analysis:
-            risk_assessment = ai_analysis['influencers'].get('risk_assessment', {})
-            high_risk_count = len(risk_assessment.get('high_risk', []))
-            if high_risk_count > 0:
-                insights.append({
-                    'category': 'influencers',
-                    'priority': 'critical',
-                    'message': f"{high_risk_count} influenceur(s) à risque élevé identifié(s)",
-                    'action': 'Engagement immédiat nécessaire avec ces comptes'
-                })
-        
-        # Insights de tendances
-        if 'trends' in ai_analysis:
-            patterns = ai_analysis['trends'].get('patterns', {})
-            peaks_count = patterns.get('peaks_detected', 0)
-            if peaks_count > 2:
-                insights.append({
-                    'category': 'trends',
-                    'priority': 'medium',
-                    'message': f"{peaks_count} pics d'activité détectés",
-                    'action': 'Analyser les causes des pics pour anticipation future'
-                })
-        
-        # Insights de contenu web
-        if 'web_content' in ai_analysis:
-            engagement_analysis = ai_analysis['web_content'].get('engagement_analysis', {})
-            if engagement_analysis.get('engagement_rate', 0) < 0.3:
-                insights.append({
-                    'category': 'web_content',
-                    'priority': 'medium',
-                    'message': 'Taux d\'engagement web faible détecté',
-                    'action': 'Optimiser la stratégie de contenu pour plus d\'interaction'
-                })
-        
-        return insights[:10]  # Limiter à 10 insights
-    
-    def _suggest_action_for_sentiment_insight(self, insight: str) -> str:
-        """Suggérer une action basée sur un insight de sentiment"""
-        insight_lower = insight.lower()
-        
-        if 'critique' in insight_lower or 'crise' in insight_lower:
-            return 'Activation protocole de gestion de crise'
-        elif 'négatif' in insight_lower:
-            return 'Préparation de stratégie de correction d\'image'
-        elif 'positif' in insight_lower and 'opportunité' in insight_lower:
-            return 'Capitaliser sur le sentiment positif avec campagne ciblée'
-        elif 'polarisé' in insight_lower:
-            return 'Communication équilibrée pour réconcilier les opinions'
+        if positive_total > negative_total * 2:
+            overall_tone = "majoritairement positive"
+            sentiment_emoji = "😊"
+        elif negative_total > positive_total * 2:
+            overall_tone = "majoritairement négative"
+            sentiment_emoji = "😟"
+        elif positive_total > negative_total:
+            overall_tone = "légèrement positive"
+            sentiment_emoji = "🙂"
+        elif negative_total > positive_total:
+            overall_tone = "légèrement négative"
+            sentiment_emoji = "😐"
         else:
-            return 'Surveillance continue et analyse approfondie'
-    
-    def _generate_executive_summary(self, base_data: Dict, ai_analysis: Dict) -> Dict:
-        """Générer un résumé exécutif"""
+            overall_tone = "neutre et équilibrée"
+            sentiment_emoji = "😶"
         
-        # Extraire les éléments clés
-        total_mentions = len(base_data['mentions'])
+        # Générer le résumé exécutif narratif avec l'IA
+        synthesis_text = await self._generate_narrative_synthesis(
+            summaries, overall_tone, total_contents, days
+        )
         
-        # Sentiment dominant
-        sentiment_dist = base_data['sentiment_distribution']
-        total_sentiment = sum(sentiment_dist.values())
-        
-        if total_sentiment > 0:
-            sentiment_percentages = {
-                k: (v / total_sentiment) * 100 
-                for k, v in sentiment_dist.items()
-            }
-            
-            dominant_sentiment = max(sentiment_percentages, key=sentiment_percentages.get)
-            dominant_percentage = sentiment_percentages[dominant_sentiment]
-        else:
-            dominant_sentiment = 'unknown'
-            dominant_percentage = 0
-        
-        # Niveau de priorité de l'IA
-        ai_priority = ai_analysis.get('synthesis', {}).get('priority_level', 'NORMAL')
-        
-        # Top source
-        top_source = max(base_data['sources_distribution'], key=base_data['sources_distribution'].get) if base_data['sources_distribution'] else 'unknown'
-        
-        # Engagement moyen
-        avg_engagement = base_data['engagement_stats'].get('average', 0)
-        
-        # Construire le résumé
-        summary = {
-            'key_figures': {
-                'total_mentions': total_mentions,
-                'dominant_sentiment': f"{dominant_sentiment} ({dominant_percentage:.0f}%)",
-                'top_source': top_source,
-                'avg_engagement': round(avg_engagement, 1),
-                'ai_priority_level': ai_priority
+        return {
+            'total_contents_analyzed': total_contents,
+            'period_days': days,
+            'overall_tone': overall_tone,
+            'sentiment_emoji': sentiment_emoji,
+            'breakdown': {
+                'very_positive': very_pos,
+                'positive': pos,
+                'neutral': neu,
+                'negative': neg,
+                'very_negative': very_neg
             },
-            'main_findings': self._extract_main_findings(ai_analysis),
-            'critical_points': self._extract_critical_points(ai_analysis),
-            'next_steps': self._extract_next_steps(ai_analysis),
-            'confidence_score': self._calculate_confidence_score(base_data, ai_analysis)
+            'synthesis_text': synthesis_text,
+            'critical_points': self._identify_critical_points(classified_contents),
+            'opportunities': self._identify_opportunities(classified_contents)
         }
-        
-        return summary
     
-    def _extract_main_findings(self, ai_analysis: Dict) -> List[str]:
-        """Extraire les principales découvertes"""
-        findings = []
+    async def _generate_narrative_synthesis(
+        self, 
+        summaries: Dict, 
+        overall_tone: str, 
+        total_contents: int, 
+        days: int
+    ) -> str:
+        """Générer une synthèse narrative avec l'IA"""
         
-        # Findings de sentiment
-        sentiment_analysis = ai_analysis.get('sentiment', {}).get('analysis', '')
-        if sentiment_analysis:
-            # Extraire la première phrase comme finding principal
-            first_sentence = sentiment_analysis.split('.')[0]
-            if len(first_sentence) > 20:
-                findings.append(f"Sentiment: {first_sentence}")
+        if not self.llm_service.is_available():
+            return self._simple_narrative_synthesis(summaries, overall_tone, total_contents, days)
         
-        # Findings de tendances
-        trends_analysis = ai_analysis.get('trends', {}).get('analysis', '')
-        if trends_analysis:
-            first_sentence = trends_analysis.split('.')[0]
-            if len(first_sentence) > 20:
-                findings.append(f"Tendances: {first_sentence}")
+        # Préparer le contexte pour l'IA
+        summaries_text = []
+        for category, data in summaries.items():
+            if data['count'] > 0:
+                summaries_text.append(f"{category.upper().replace('_', ' ')}: {data['summary']}")
         
-        # Findings d'influenceurs
-        influencers_analysis = ai_analysis.get('influencers', {})
-        if influencers_analysis.get('top_influencers'):
-            top_count = len(influencers_analysis['top_influencers'])
-            findings.append(f"Influenceurs: {top_count} comptes influents identifiés")
+        combined_summaries = '\n\n'.join(summaries_text)
         
-        # Findings de contenu web
-        web_analysis = ai_analysis.get('web_content', {})
-        if web_analysis.get('articles_count', 0) > 0:
-            articles_count = web_analysis['articles_count']
-            comments_count = web_analysis.get('comments_count', 0)
-            findings.append(f"Contenu web: {articles_count} articles analysés, {comments_count} commentaires extraits")
+        prompt = f"""
+Tu es un directeur de la communication qui rédige une synthèse exécutive pour le PDG.
+
+DONNÉES D'ANALYSE ({total_contents} contenus sur {days} jours):
+
+{combined_summaries}
+
+Tonalité générale: {overall_tone}
+
+Rédige une synthèse narrative de 2-3 paragraphes qui:
+1. RÉSUME l'essentiel de ce qui se dit (pas de statistiques, juste les faits marquants)
+2. EXPLIQUE ce que cela signifie pour l'organisation
+3. INDIQUE les points d'attention prioritaires
+
+Style: Direct, factuel, orienté action. Comme dans un brief de 5 minutes au PDG.
+Ton: Professionnel mais accessible. Évite le jargon.
+Perspective: "Voici ce que nous observons et ce qu'il faut retenir"
+"""
         
-        return findings[:5]  # Top 5 findings
+        try:
+            context = {'mentions': [], 'keywords': [], 'period_days': days}
+            synthesis = await self.llm_service.analyze_with_local_llm(prompt, context)
+            return synthesis.strip()
+        except Exception as e:
+            logger.warning(f"Erreur génération synthèse narrative: {e}")
+            return self._simple_narrative_synthesis(summaries, overall_tone, total_contents, days)
     
-    def _extract_critical_points(self, ai_analysis: Dict) -> List[str]:
-        """Extraire les points critiques"""
+    def _simple_narrative_synthesis(
+        self, 
+        summaries: Dict, 
+        overall_tone: str, 
+        total_contents: int, 
+        days: int
+    ) -> str:
+        """Synthèse narrative simple (fallback)"""
+        
+        synthesis_parts = []
+        
+        # Introduction
+        synthesis_parts.append(
+            f"Sur les {days} derniers jours, nous avons analysé {total_contents} contenus. "
+            f"La tonalité générale est {overall_tone}."
+        )
+        
+        # Points saillants par catégorie
+        priority_categories = ['very_negative', 'very_positive', 'negative', 'positive']
+        
+        for category in priority_categories:
+            data = summaries.get(category, {})
+            if data.get('count', 0) > 0:
+                synthesis_parts.append(data['summary'])
+        
+        # Contexte neutre si significatif
+        if summaries.get('neutral', {}).get('count', 0) > total_contents * 0.4:
+            synthesis_parts.append(summaries['neutral']['summary'])
+        
+        return ' '.join(synthesis_parts)
+    
+    def _identify_critical_points(self, classified_contents: Dict) -> List[str]:
+        """Identifier les points critiques nécessitant attention"""
+        
         critical_points = []
         
-        # Points critiques basés sur la priorité
-        priority = ai_analysis.get('synthesis', {}).get('priority_level', 'NORMAL')
-        
-        if priority == 'CRITIQUE':
-            critical_points.append("🚨 NIVEAU CRITIQUE: Intervention immédiate requise")
-        elif priority == 'ÉLEVÉ':
-            critical_points.append("⚠️ NIVEAU ÉLEVÉ: Surveillance renforcée nécessaire")
-        
-        # Points critiques des influenceurs
-        influencer_risks = ai_analysis.get('influencers', {}).get('risk_assessment', {})
-        high_risk_influencers = influencer_risks.get('high_risk', [])
-        if high_risk_influencers:
+        # Points très négatifs
+        very_neg_count = len(classified_contents['very_negative'])
+        if very_neg_count > 0:
             critical_points.append(
-                f"👑 INFLUENCEURS À RISQUE: {len(high_risk_influencers)} compte(s) critique(s)"
+                f"🚨 {very_neg_count} contenu(s) très négatif(s) identifié(s) - "
+                f"Risque réputationnel élevé nécessitant une attention immédiate"
             )
         
-        # Points critiques du contenu web
-        web_analysis = ai_analysis.get('web_content', {})
-        engagement_analysis = web_analysis.get('engagement_analysis', {})
-        if engagement_analysis.get('engagement_rate', 1) < 0.2:
-            critical_points.append("📉 ENGAGEMENT FAIBLE: Réactivité du public préoccupante")
+        # Points négatifs nombreux
+        neg_count = len(classified_contents['negative'])
+        if neg_count > 5:
+            critical_points.append(
+                f"⚠️ {neg_count} contenus négatifs détectés - "
+                f"Tendance défavorable à surveiller de près"
+            )
         
-        # Points critiques des tendances
-        trends_patterns = ai_analysis.get('trends', {}).get('patterns', {})
-        if trends_patterns.get('peaks_detected', 0) > 3:
-            critical_points.append("📈 VOLATILITÉ ÉLEVÉE: Activité très irrégulière détectée")
+        # Manque de contenu positif
+        pos_total = len(classified_contents['positive']) + len(classified_contents['very_positive'])
+        total = sum(len(contents) for contents in classified_contents.values())
+        
+        if pos_total < total * 0.2:  # Moins de 20% positif
+            critical_points.append(
+                f"📉 Faible présence de contenus positifs ({pos_total}/{total}) - "
+                f"Opportunité de renforcer la communication positive"
+            )
         
         return critical_points[:5]  # Top 5 points critiques
     
-    def _extract_next_steps(self, ai_analysis: Dict) -> List[str]:
-        """Extraire les prochaines étapes recommandées"""
-        next_steps = []
+    def _identify_opportunities(self, classified_contents: Dict) -> List[str]:
+        """Identifier les opportunités"""
         
-        # Étapes basées sur les recommandations IA
-        recommendations = ai_analysis.get('recommendations', {})
-        if recommendations.get('urgent_actions'):
-            next_steps.extend(recommendations['urgent_actions'][:3])
+        opportunities = []
         
-        # Étapes génériques basées sur la priorité
-        priority = ai_analysis.get('synthesis', {}).get('priority_level', 'NORMAL')
+        # Contenus très positifs
+        very_pos_count = len(classified_contents['very_positive'])
+        if very_pos_count > 0:
+            opportunities.append(
+                f"✨ {very_pos_count} contenu(s) très positif(s) - "
+                f"Amplifier ces messages favorables via la communication"
+            )
         
-        if priority in ['CRITIQUE', 'ÉLEVÉ']:
-            next_steps.append("Mise en place monitoring H24")
-            next_steps.append("Préparation éléments de communication")
+        # Forte proportion de contenus positifs
+        pos_total = len(classified_contents['positive']) + len(classified_contents['very_positive'])
+        total = sum(len(contents) for contents in classified_contents.values())
         
-        # Étapes basées sur l'analyse web
-        web_analysis = ai_analysis.get('web_content', {})
-        if web_analysis.get('articles_count', 0) > 0:
-            next_steps.append("Suivi des nouveaux articles et commentaires")
+        if pos_total > total * 0.5:  # Plus de 50% positif
+            opportunities.append(
+                f"🎯 Majorité de contenus positifs ({pos_total}/{total}) - "
+                f"Momentum favorable à capitaliser"
+            )
         
-        # Si pas d'étapes spécifiques, ajouter des étapes génériques
-        if not next_steps:
-            next_steps.extend([
-                "Continuer la surveillance habituelle",
-                "Analyser l'évolution sur 24-48h",
-                "Préparer points de vigilance"
-            ])
+        # Beaucoup de contenu neutre = opportunité de positionnement
+        neu_count = len(classified_contents['neutral'])
+        if neu_count > total * 0.4:  # Plus de 40% neutre
+            opportunities.append(
+                f"💡 {neu_count} contenus neutres - "
+                f"Opportunité d'orienter la perception avec une communication proactive"
+            )
         
-        return next_steps[:5]  # Top 5 étapes
+        return opportunities[:3]  # Top 3 opportunités
     
-    def _calculate_confidence_score(self, base_data: Dict, ai_analysis: Dict) -> float:
-        """Calculer un score de confiance pour l'analyse"""
-        confidence_factors = []
+    async def _extract_key_messages(
+        self, 
+        all_contents: List[Dict], 
+        classified_contents: Dict
+    ) -> Dict:
+        """Extraire les messages clés de toutes les catégories"""
         
-        # Facteur 1: Volume de données
-        mentions_count = len(base_data['mentions'])
-        if mentions_count >= 100:
-            confidence_factors.append(0.9)
-        elif mentions_count >= 50:
-            confidence_factors.append(0.7)
-        elif mentions_count >= 20:
-            confidence_factors.append(0.5)
-        else:
-            confidence_factors.append(0.3)
+        logger.info("🔑 Extraction des messages clés...")
         
-        # Facteur 2: Diversité des sources
-        sources_count = len(base_data['sources_distribution'])
-        if sources_count >= 5:
-            confidence_factors.append(0.8)
-        elif sources_count >= 3:
-            confidence_factors.append(0.6)
-        else:
-            confidence_factors.append(0.4)
+        key_messages = {
+            'most_discussed_topics': self._identify_main_topics(all_contents),
+            'emerging_narratives': self._identify_narratives(classified_contents),
+            'influential_voices': self._identify_influential_voices(all_contents),
+            'critical_claims': await self._extract_critical_claims(classified_contents)
+        }
         
-        # Facteur 3: Période d'analyse
-        # (supposé correct car géré en amont)
-        confidence_factors.append(0.7)
+        return key_messages
+    
+    def _identify_main_topics(self, contents: List[Dict]) -> List[str]:
+        """Identifier les sujets principaux discutés"""
         
-        # Facteur 4: Analyse web disponible
-        web_analysis = ai_analysis.get('web_content', {})
-        if web_analysis.get('articles_count', 0) > 0:
-            confidence_factors.append(0.9)
-        else:
-            confidence_factors.append(0.6)
+        # Extraire les mots clés de tous les titres
+        all_titles = ' '.join([c['title'] for c in contents])
         
-        # Facteur 5: Qualité des données de sentiment
-        sentiment_dist = base_data['sentiment_distribution']
-        total_sentiment = sum(sentiment_dist.values())
-        unknown_ratio = sentiment_dist.get('unknown', 0) / max(total_sentiment, 1)
+        words = all_titles.lower().split()
+        word_counts = Counter([w for w in words if len(w) > 5])
         
-        if unknown_ratio < 0.2:
-            confidence_factors.append(0.8)
-        elif unknown_ratio < 0.5:
-            confidence_factors.append(0.6)
-        else:
-            confidence_factors.append(0.4)
+        top_topics = [word for word, count in word_counts.most_common(5)]
         
-        # Calculer la moyenne
-        return sum(confidence_factors) / len(confidence_factors)
+        return top_topics
+    
+    def _identify_narratives(self, classified_contents: Dict) -> List[Dict]:
+        """Identifier les narratives émergentes"""
+        
+        narratives = []
+        
+        # Narrative négative dominante
+        neg_contents = classified_contents['negative'] + classified_contents['very_negative']
+        if neg_contents:
+            neg_themes = self._extract_key_themes(neg_contents)
+            if neg_themes:
+                narratives.append({
+                    'type': 'negative',
+                    'description': f"Narrative critique autour de: {', '.join(neg_themes[:3])}",
+                    'content_count': len(neg_contents)
+                })
+        
+        # Narrative positive émergente
+        pos_contents = classified_contents['positive'] + classified_contents['very_positive']
+        if pos_contents:
+            pos_themes = self._extract_key_themes(pos_contents)
+            if pos_themes:
+                narratives.append({
+                    'type': 'positive',
+                    'description': f"Narrative positive sur: {', '.join(pos_themes[:3])}",
+                    'content_count': len(pos_contents)
+                })
+        
+        return narratives
+    
+    def _identify_influential_voices(self, contents: List[Dict]) -> List[Dict]:
+        """Identifier les voix influentes"""
+        
+        # Grouper par auteur et source
+        author_stats = {}
+        
+        for content in contents:
+            author = content['author']
+            if author not in author_stats:
+                author_stats[author] = {
+                    'author': author,
+                    'content_count': 0,
+                    'total_engagement': 0,
+                    'sources': set()
+                }
+            
+            author_stats[author]['content_count'] += 1
+            author_stats[author]['total_engagement'] += content['engagement_score']
+            author_stats[author]['sources'].add(content['source'])
+        
+        # Trier par engagement
+        sorted_authors = sorted(
+            author_stats.values(), 
+            key=lambda x: x['total_engagement'], 
+            reverse=True
+        )
+        
+        # Formater les top 5
+        top_voices = []
+        for author in sorted_authors[:5]:
+            top_voices.append({
+                'name': author['author'],
+                'mentions': author['content_count'],
+                'engagement': author['total_engagement'],
+                'platforms': list(author['sources'])
+            })
+        
+        return top_voices
+    
+    async def _extract_critical_claims(self, classified_contents: Dict) -> List[str]:
+        """Extraire les affirmations critiques nécessitant réponse"""
+        
+        critical_contents = (
+            classified_contents['very_negative'] + 
+            classified_contents['negative']
+        )
+        
+        if not critical_contents:
+            return []
+        
+        # Extraire les phrases clés des contenus critiques
+        critical_claims = []
+        
+        for content in critical_contents[:5]:  # Top 5 plus critiques
+            # Prendre la première phrase significative
+            sentences = content['full_content'].split('.')
+            for sentence in sentences:
+                if len(sentence.strip()) > 50:  # Phrases substantielles
+                    critical_claims.append(sentence.strip() + ".")
+                    break
+        
+        return critical_claims[:5]  # Max 5 affirmations critiques
+    
+    async def _generate_strategic_recommendations(
+        self,
+        executive_synthesis: Dict,
+        key_messages: Dict,
+        classified_contents: Dict
+    ) -> List[Dict]:
+        """Générer des recommandations stratégiques actionnables"""
+        
+        logger.info("🎯 Génération des recommandations stratégiques...")
+        
+        recommendations = []
+        
+        # Basé sur le niveau de criticité
+        very_neg_count = len(classified_contents['very_negative'])
+        neg_count = len(classified_contents['negative'])
+        
+        if very_neg_count > 0:
+            recommendations.append({
+                'priority': 'URGENT',
+                'category': 'Gestion de crise',
+                'action': "Mise en place d'une cellule de crise communication",
+                'rationale': f"{very_neg_count} contenu(s) très négatif(s) identifié(s) avec risque réputationnel élevé",
+                'timeline': 'Immédiat (0-24h)'
+            })
+        
+        if neg_count > 5:
+            recommendations.append({
+                'priority': 'ÉLEVÉE',
+                'category': 'Réponse proactive',
+                'action': "Préparer des éléments de langage et réponses factuelles",
+                'rationale': f"Volume significatif de contenus négatifs ({neg_count}) nécessitant clarifications",
+                'timeline': 'Court terme (1-3 jours)'
+            })
+        
+        # Opportunités positives
+        pos_total = len(classified_contents['positive']) + len(classified_contents['very_positive'])
+        if pos_total > 5:
+            recommendations.append({
+                'priority': 'MOYENNE',
+                'category': 'Amplification',
+                'action': "Amplifier les messages positifs via nos canaux officiels",
+                'rationale': f"{pos_total} contenus positifs identifiés - momentum favorable à capitaliser",
+                'timeline': 'Court terme (1-5 jours)'
+            })
+        
+        # Contenu neutre = opportunité
+        neu_count = len(classified_contents['neutral'])
+        total = sum(len(contents) for contents in classified_contents.values())
+        if neu_count > total * 0.3:
+            recommendations.append({
+                'priority': 'MOYENNE',
+                'category': 'Positionnement',
+                'action': "Développer une stratégie de contenu pour orienter la perception",
+                'rationale': f"{neu_count} contenus neutres - audience réceptive à un positionnement clair",
+                'timeline': 'Moyen terme (1-2 semaines)'
+            })
+        
+        # Voix influentes
+        top_voices = key_messages.get('influential_voices', [])
+        if top_voices:
+            recommendations.append({
+                'priority': 'MOYENNE',
+                'category': 'Relations influenceurs',
+                'action': f"Engagement ciblé avec les {len(top_voices)} voix influentes identifiées",
+                'rationale': "Construire ou renforcer les relations avec les acteurs clés du débat",
+                'timeline': 'Moyen terme (2-4 semaines)'
+            })
+        
+        return sorted(recommendations, key=lambda x: {'URGENT': 0, 'ÉLEVÉE': 1, 'MOYENNE': 2}.get(x['priority'], 3))
+    
+    def _generate_executive_statistics(
+        self, 
+        all_contents: List[Dict], 
+        classified_contents: Dict
+    ) -> Dict:
+        """Générer des statistiques pour le rapport"""
+        
+        total = len(all_contents)
+        
+        if total == 0:
+            return {}
+        
+        # Distribution par source
+        sources = Counter([c['source'] for c in all_contents])
+        
+        # Engagement total
+        total_engagement = sum(c['engagement_score'] for c in all_contents)
+        avg_engagement = total_engagement / total if total > 0 else 0
+        
+        # Distribution temporelle (par jour)
+        dates = [c['published_at'][:10] for c in all_contents if c['published_at']]
+        temporal_dist = Counter(dates)
+        
+        return {
+            'total_contents': total,
+            'sources_distribution': dict(sources.most_common()),
+            'total_engagement': total_engagement,
+            'average_engagement': round(avg_engagement, 1),
+            'temporal_distribution': dict(temporal_dist),
+            'sentiment_breakdown': {
+                'very_positive_pct': round(len(classified_contents['very_positive']) / total * 100, 1),
+                'positive_pct': round(len(classified_contents['positive']) / total * 100, 1),
+                'neutral_pct': round(len(classified_contents['neutral']) / total * 100, 1),
+                'negative_pct': round(len(classified_contents['negative']) / total * 100, 1),
+                'very_negative_pct': round(len(classified_contents['very_negative']) / total * 100, 1)
+            }
+        }
+    
+    def _get_keyword_name(self, keyword_id: int) -> str:
+        """Obtenir le nom d'un mot-clé"""
+        keyword = self.db.query(Keyword).filter(Keyword.id == keyword_id).first()
+        return keyword.keyword if keyword else f"Mot-clé #{keyword_id}"
     
     async def generate_html_report(self, report_data: Dict) -> str:
-        """Générer le rapport au format HTML"""
+        """Générer le rapport HTML exécutif"""
         
-        metadata = report_data['metadata']
-        summary = report_data['summary']
-        ai_analysis = report_data['ai_analysis']
-        executive_summary = report_data['executive_summary']
-        
-        html = f"""
-        <!DOCTYPE html>
-        <html lang="fr">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>{metadata['title']}</title>
-            <style>
-                body {{ 
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                    line-height: 1.6; color: #333; max-width: 1200px; margin: 0 auto; padding: 20px;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    min-height: 100vh;
-                }}
-                .container {{ 
-                    background: white; border-radius: 15px; padding: 40px; 
-                    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-                }}
-                .header {{ 
-                    text-align: center; padding-bottom: 30px; 
-                    border-bottom: 3px solid #667eea; margin-bottom: 30px;
-                }}
-                .header h1 {{ 
-                    color: #667eea; font-size: 2.5em; margin: 0 0 10px 0; 
-                    background: linear-gradient(135deg, #667eea, #764ba2);
-                    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-                }}
-                .ai-badge {{ 
-                    background: linear-gradient(45deg, #667eea, #764ba2); 
-                    color: white; padding: 8px 16px; border-radius: 20px; 
-                    font-size: 0.9em; font-weight: bold; margin: 0 10px;
-                    display: inline-block;
-                }}
-                .section {{ margin: 30px 0; }}
-                .section-title {{ 
-                    color: #667eea; font-size: 1.5em; font-weight: bold; 
-                    margin: 20px 0 15px 0; padding-bottom: 8px; 
-                    border-bottom: 2px solid #e5e7eb;
-                }}
-                .ai-section {{ 
-                    background: linear-gradient(135deg, #667eea15, #764ba205); 
-                    border-left: 5px solid #667eea; padding: 20px; margin: 15px 0; 
-                    border-radius: 8px;
-                }}
-                .metrics-grid {{ 
-                    display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); 
-                    gap: 20px; margin: 20px 0;
-                }}
-                .metric-card {{ 
-                    background: linear-gradient(135deg, #f8fafc, #e2e8f0); 
-                    padding: 20px; border-radius: 10px; text-align: center;
-                    border: 1px solid #e5e7eb;
-                }}
-                .metric-value {{ 
-                    font-size: 2em; font-weight: bold; color: #667eea; margin: 10px 0;
-                }}
-                .metric-label {{ 
-                    color: #6b7280; font-size: 0.9em; font-weight: 500;
-                }}
-                .priority-critical {{ 
-                    background: #fef2f2; border: 2px solid #dc2626; color: #dc2626;
-                }}
-                .priority-high {{ 
-                    background: #fef3c7; border: 2px solid #f59e0b; color: #f59e0b;
-                }}
-                .priority-medium {{ 
-                    background: #f0f9ff; border: 2px solid #3b82f6; color: #3b82f6;
-                }}
-                .priority-normal {{ 
-                    background: #f0fdf4; border: 2px solid #10b981; color: #10b981;
-                }}
-                .insight-list {{ list-style: none; padding: 0; }}
-                .insight-item {{ 
-                    background: #f9fafb; margin: 8px 0; padding: 15px; 
-                    border-left: 4px solid #667eea; border-radius: 6px;
-                }}
-                .finding-item {{
-                    background: #f8fafc; margin: 10px 0; padding: 12px;
-                    border-radius: 6px; border-left: 3px solid #10b981;
-                }}
-                .critical-point {{
-                    background: #fef2f2; margin: 10px 0; padding: 12px;
-                    border-radius: 6px; border-left: 3px solid #ef4444;
-                    font-weight: 500;
-                }}
-                .next-step {{
-                    background: #f0f9ff; margin: 8px 0; padding: 10px;
-                    border-radius: 6px; border-left: 3px solid #3b82f6;
-                }}
-                .confidence-bar {{
-                    width: 100%; height: 20px; background: #e5e7eb; 
-                    border-radius: 10px; overflow: hidden; margin: 10px 0;
-                }}
-                .confidence-fill {{
-                    height: 100%; background: linear-gradient(90deg, #ef4444, #f59e0b, #10b981);
-                    border-radius: 10px; transition: width 0.3s ease;
-                }}
-                .footer {{ 
-                    margin-top: 40px; padding-top: 20px; 
-                    border-top: 2px solid #e5e7eb; text-align: center; 
-                    color: #6b7280; font-size: 0.9em;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <!-- Header -->
-                <div class="header">
-                    <h1>🤖 {metadata['title']}</h1>
-                    <span class="ai-badge">IA SOUVERAINE</span>
-                    <span class="ai-badge">ANALYSE INTELLIGENTE</span>
-                    <p style="color: #6b7280; margin-top: 15px;">
-                        Généré le {metadata['generated_at'].strftime('%d/%m/%Y à %H:%M')} • 
-                        Période: {metadata['period_days']} jours • 
-                        Mots-clés: {', '.join(metadata['keywords'])}
-                    </p>
-                </div>
-                
-                <!-- Résumé Exécutif -->
-                <div class="section">
-                    <h2 class="section-title">📊 Résumé Exécutif</h2>
-                    <div class="metrics-grid">
-                        <div class="metric-card">
-                            <div class="metric-value">{summary['total_mentions']}</div>
-                            <div class="metric-label">Total Mentions</div>
-                        </div>
-                        <div class="metric-card">
-                            <div class="metric-value">{executive_summary['key_figures']['dominant_sentiment']}</div>
-                            <div class="metric-label">Sentiment Dominant</div>
-                        </div>
-                        <div class="metric-card">
-                            <div class="metric-value">{executive_summary['key_figures']['top_source']}</div>
-                            <div class="metric-label">Source Principale</div>
-                        </div>
-                        <div class="metric-card">
-                            <div class="metric-value">{executive_summary['key_figures']['avg_engagement']}</div>
-                            <div class="metric-label">Engagement Moyen</div>
-                        </div>
-                    </div>
-                    
-                    <div class="ai-section priority-{executive_summary['key_figures']['ai_priority_level'].lower()}">
-                        <h3>🎯 Niveau de Priorité IA: {executive_summary['key_figures']['ai_priority_level']}</h3>
-                        <div style="margin-top: 15px;">
-                            <strong>Score de Confiance:</strong>
-                            <div class="confidence-bar">
-                                <div class="confidence-fill" style="width: {executive_summary['confidence_score']*100:.0f}%;"></div>
-                            </div>
-                            {executive_summary['confidence_score']*100:.0f}% de confiance dans l'analyse
-                        </div>
-                    </div>
-                </div>
-        """
-        
-        # Principales découvertes
-        if executive_summary.get('main_findings'):
-            html += """
-                <div class="section">
-                    <h2 class="section-title">🔍 Principales Découvertes</h2>
-            """
-            for finding in executive_summary['main_findings']:
-                html += f'<div class="finding-item">{finding}</div>'
-            html += "</div>"
-        
-        # Points critiques
-        if executive_summary.get('critical_points'):
-            html += """
-                <div class="section">
-                    <h2 class="section-title">🚨 Points Critiques</h2>
-            """
-            for point in executive_summary['critical_points']:
-                html += f'<div class="critical-point">{point}</div>'
-            html += "</div>"
-        
-        # Analyses IA
-        html += """
-            <div class="section">
-                <h2 class="section-title">🧠 Analyses IA Détaillées</h2>
-        """
-        
-        for analysis_type, analysis_data in ai_analysis.items():
-            if isinstance(analysis_data, dict) and 'analysis' in analysis_data:
-                type_name = analysis_type.replace('_', ' ').title()
-                analysis_text = analysis_data['analysis']
-                
-                html += f"""
-                    <div class="ai-section">
-                        <h3>🤖 {type_name}</h3>
-                        <p>{analysis_text}</p>
-                    </div>
-                """
-        
-        # Prochaines étapes
-        if executive_summary.get('next_steps'):
-            html += """
-                <div class="section">
-                    <h2 class="section-title">➡️ Prochaines Étapes Recommandées</h2>
-            """
-            for i, step in enumerate(executive_summary['next_steps'], 1):
-                html += f'<div class="next-step">{i}. {step}</div>'
-            html += "</div>"
-        
-        # Insights actionnables
-        actionable_insights = report_data.get('actionable_insights', [])
-        if actionable_insights:
-            html += """
-                <div class="section">
-                    <h2 class="section-title">💡 Insights Actionnables</h2>
-                    <ul class="insight-list">
-            """
-            for insight in actionable_insights:
-                priority_class = f"priority-{insight['priority']}"
-                html += f"""
-                    <li class="insight-item {priority_class}">
-                        <strong>[{insight['category'].upper()}]</strong> {insight['message']}<br>
-                        <em>Action suggérée: {insight['action']}</em>
-                    </li>
-                """
-            html += "</ul></div>"
-        
-        # Footer
-        html += f"""
-                <div class="footer">
-                    <p>🤖 Rapport généré par IA Souveraine • Brand Monitor Intelligence</p>
-                    <p>Analyse basée sur {summary['total_mentions']} mentions • 
-                       {summary['sources_count']} sources • 
-                       {summary.get('web_content_analyzed', 0)} contenus web analysés</p>
-                    <p style="font-size: 0.8em; margin-top: 10px;">
-                        Technologies: Ollama + HuggingFace Transformers • 
-                        Extraction Web Intelligente • Analyse Multi-Agents
-                    </p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
-        return html
+        # À implémenter avec un template HTML professionnel
+        pass
     
     async def generate_pdf_report(self, report_data: Dict) -> bytes:
-        """Générer le rapport au format PDF"""
-        try:
-            from weasyprint import HTML, CSS
-            
-            # Générer le HTML
-            html_content = await self.generate_html_report(report_data)
-            
-            # CSS pour PDF
-            pdf_css = CSS(string="""
-                @page {
-                    size: A4;
-                    margin: 1cm;
-                }
-                body {
-                    background: white !important;
-                    font-size: 10pt;
-                }
-                .container {
-                    box-shadow: none !important;
-                }
-            """)
-            
-            # Générer le PDF
-            pdf_bytes = HTML(string=html_content).write_pdf(stylesheets=[pdf_css])
-            
-            return pdf_bytes
-            
-        except ImportError:
-            logger.warning("WeasyPrint non disponible, retour HTML")
-            html_content = await self.generate_html_report(report_data)
-            return html_content.encode('utf-8')
-        except Exception as e:
-            logger.error(f"Erreur génération PDF: {e}")
-            # Fallback vers HTML
-            html_content = await self.generate_html_report(report_data)
-            return html_content.encode('utf-8')
+        """Générer le rapport PDF exécutif"""
+        
+        # À implémenter avec WeasyPrint
+        pass
