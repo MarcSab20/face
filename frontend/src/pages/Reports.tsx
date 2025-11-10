@@ -28,7 +28,7 @@ import { Card, Badge, PageLoading, Modal, Alert, Tabs } from '@/components/ui/in
 import toast from 'react-hot-toast';
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = 'http://localhost:8000';
 
 interface KeywordOption {
   id: number;

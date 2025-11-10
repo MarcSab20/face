@@ -5,7 +5,7 @@ Endpoints pour créer, prévisualiser et télécharger des rapports IA
 
 from fastapi import APIRouter, Depends, HTTPException, Response, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 import logging
 import asyncio
@@ -774,38 +774,65 @@ async def generate_executive_report(
     Focus sur la synthèse et les recommandations actionnables
     """
     try:
+        logger.info(f"🎯 Démarrage génération rapport exécutif")
+        
         # Vérifier les paramètres
         keywords = db.query(Keyword).filter(Keyword.id.in_(request.keyword_ids)).all()
         if not keywords:
             raise HTTPException(status_code=404, detail="Aucun mot-clé trouvé")
         
+        logger.info(f"Mots-clés trouvés: {[k.keyword for k in keywords]}")
+        
         # Initialiser le générateur exécutif
         exec_generator = IntelligentReportGenerator(db)
         
-        # Générer le rapport
-        report_data = await exec_generator.generate_executive_report(
-            keyword_ids=request.keyword_ids,
-            days=request.days,
-            report_title=request.report_title,
-            format_type=request.format
-        )
+        # Générer le rapport avec gestion d'erreur robuste
+        try:
+            report_data = await exec_generator.generate_executive_report(
+                keyword_ids=request.keyword_ids,
+                days=request.days,
+                report_title=request.report_title,
+                format_type=request.format
+            )
+            logger.info("✅ Données du rapport générées avec succès")
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de la génération des données: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Erreur lors de la génération des données du rapport: {str(e)}"
+            )
         
         # Générer le HTML
-        from app.executive_html_template import generate_executive_html_template
-        html_content = generate_executive_html_template(report_data)
+        try:
+            # Pour l'instant, générer un HTML simple si le template n'existe pas
+            html_content = generate_simple_executive_html(report_data)
+            logger.info("✅ HTML généré avec succès")
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de la génération HTML: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Erreur lors de la génération du HTML: {str(e)}"
+            )
         
         if request.format == 'pdf':
-            # Convertir en PDF
-            from weasyprint import HTML
-            pdf_bytes = HTML(string=html_content).write_pdf()
-            
-            return Response(
-                content=pdf_bytes,
-                media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f"attachment; filename=rapport_executif_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
-                }
-            )
+            try:
+                # Convertir en PDF
+                from weasyprint import HTML
+                pdf_bytes = HTML(string=html_content).write_pdf()
+                
+                return Response(
+                    content=pdf_bytes,
+                    media_type="application/pdf",
+                    headers={
+                        "Content-Disposition": f"attachment; filename=rapport_executif_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
+                    }
+                )
+            except Exception as e:
+                logger.error(f"❌ Erreur lors de la génération PDF: {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Erreur lors de la génération du PDF: {str(e)}"
+                )
         else:
             # Retourner HTML
             return Response(
@@ -816,12 +843,137 @@ async def generate_executive_report(
                 }
             )
             
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Erreur génération rapport exécutif: {e}")
+        logger.error(f"❌ Erreur inattendue génération rapport exécutif: {e}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Erreur lors de la génération: {str(e)}"
+            detail=f"Erreur inattendue: {str(e)}"
         )
+
+def generate_simple_executive_html(report_data: Dict) -> str:
+    """Générer un HTML simple pour le rapport exécutif"""
+    
+    metadata = report_data.get('metadata', {})
+    synthesis = report_data.get('executive_synthesis', {})
+    summaries = report_data.get('content_summaries', {})
+    recommendations = report_data.get('strategic_recommendations', [])
+    
+    html = f"""
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{metadata.get('title', 'Rapport Exécutif')}</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #f5f5f5;
+        }}
+        .container {{
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }}
+        h2 {{
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }}
+        .metadata {{
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }}
+        .synthesis {{
+            background: #e8f5e9;
+            padding: 20px;
+            border-left: 4px solid #4caf50;
+            margin: 20px 0;
+        }}
+        .summary-section {{
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }}
+        .recommendation {{
+            background: #fff3cd;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #ffc107;
+        }}
+        .priority {{
+            font-weight: bold;
+            color: #d32f2f;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 {metadata.get('title', 'Rapport Exécutif')}</h1>
+        
+        <div class="metadata">
+            <strong>Mots-clés analysés:</strong> {', '.join(metadata.get('keywords', []))}<br>
+            <strong>Période:</strong> {metadata.get('period_days', 0)} jours<br>
+            <strong>Contenus analysés:</strong> {metadata.get('total_contents_analyzed', 0)}<br>
+            <strong>Généré le:</strong> {datetime.utcnow().strftime('%d/%m/%Y à %H:%M')}
+        </div>
+        
+        <div class="synthesis">
+            <h2>📊 Synthèse Exécutive</h2>
+            <p><strong>Tonalité générale:</strong> {synthesis.get('overall_tone', 'N/A')} {synthesis.get('sentiment_emoji', '')}</p>
+            <p>{synthesis.get('synthesis_text', 'Synthèse en cours de génération...')}</p>
+        </div>
+        
+        <h2>💡 Points Critiques</h2>
+        <ul>
+            {''.join(f'<li>{point}</li>' for point in synthesis.get('critical_points', []))}
+        </ul>
+        
+        <h2>✨ Opportunités</h2>
+        <ul>
+            {''.join(f'<li>{opp}</li>' for opp in synthesis.get('opportunities', []))}
+        </ul>
+        
+        <h2>🎯 Recommandations Stratégiques</h2>
+        {''.join(f'''
+        <div class="recommendation">
+            <div class="priority">Priorité: {rec.get('priority', 'N/A')}</div>
+            <strong>{rec.get('category', 'N/A')}:</strong> {rec.get('action', 'N/A')}<br>
+            <em>Rationale:</em> {rec.get('rationale', 'N/A')}<br>
+            <em>Timeline:</em> {rec.get('timeline', 'N/A')}
+        </div>
+        ''' for rec in recommendations)}
+        
+        <h2>📝 Résumés par Catégorie</h2>
+        {''.join(f'''
+        <div class="summary-section">
+            <h3>{category.replace('_', ' ').title()}: {data.get('count', 0)} contenus</h3>
+            <p>{data.get('summary', 'N/A')}</p>
+        </div>
+        ''' for category, data in summaries.items() if data.get('count', 0) > 0)}
+    </div>
+</body>
+</html>
+    """
+    
+    return html
 
 @intelligent_reports_router.post("/generate-async")
 async def generate_intelligent_report_async(

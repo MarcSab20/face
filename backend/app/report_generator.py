@@ -131,84 +131,163 @@ class IntelligentReportGenerator:
             'very_negative': []
         }
         
-        for content in contents:
-            # Analyser le sentiment réel avec l'IA
-            sentiment_analysis = await self._analyze_content_sentiment(content['full_text'])
+        for idx, content in enumerate(contents):
+            try:
+                # Analyser le sentiment réel avec l'IA
+                full_text = content.get('full_text', '')
+                
+                # ✅ Vérifier que le texte n'est pas vide
+                if not full_text or len(full_text.strip()) < 10:
+                    logger.debug(f"Contenu {idx+1} trop court, classification neutre")
+                    category = 'neutral'
+                    score = 0
+                    reasoning = 'Contenu trop court pour analyse'
+                else:
+                    sentiment_analysis = await self._analyze_content_sentiment(full_text)
+                    
+                    # ✅ CORRECTION CRITIQUE: Vérifier que sentiment_analysis n'est pas None
+                    if sentiment_analysis is None:
+                        logger.warning(f"Analyse sentiment retourné None pour contenu {idx+1}, utilisation neutre")
+                        sentiment_analysis = {
+                            'category': 'neutral',
+                            'score': 0,
+                            'reasoning': 'Analyse échouée'
+                        }
+                    
+                    # Extraire les valeurs avec des valeurs par défaut
+                    category = sentiment_analysis.get('category', 'neutral')
+                    score = sentiment_analysis.get('score', 0)
+                    reasoning = sentiment_analysis.get('reasoning', 'Analyse automatique')
+                
+                # Valider que la catégorie est valide
+                if category not in classified:
+                    logger.warning(f"Catégorie invalide '{category}' pour contenu {idx+1}, utilisation de 'neutral'")
+                    category = 'neutral'
+                
+                content['ai_sentiment'] = category
+                content['ai_sentiment_score'] = score
+                content['ai_sentiment_reasoning'] = reasoning
+                
+                # Classer dans la bonne catégorie
+                classified[category].append(content)
+                
+                # Log de progression tous les 50 contenus
+                if (idx + 1) % 50 == 0:
+                    logger.info(f"Progression: {idx + 1}/{len(contents)} contenus classifiés")
             
-            content['ai_sentiment'] = sentiment_analysis['category']
-            content['ai_sentiment_score'] = sentiment_analysis['score']
-            content['ai_sentiment_reasoning'] = sentiment_analysis['reasoning']
-            
-            # Classer dans la bonne catégorie
-            classified[sentiment_analysis['category']].append(content)
+            except Exception as e:
+                logger.error(f"Erreur classification contenu {idx+1}: {e}")
+                # En cas d'erreur, classer comme neutre
+                content['ai_sentiment'] = 'neutral'
+                content['ai_sentiment_score'] = 0
+                content['ai_sentiment_reasoning'] = 'Erreur lors de l\'analyse'
+                classified['neutral'].append(content)
         
         logger.info(f"✅ Classification terminée: {len(classified['very_positive'])} très positifs, "
-                   f"{len(classified['positive'])} positifs, {len(classified['neutral'])} neutres, "
-                   f"{len(classified['negative'])} négatifs, {len(classified['very_negative'])} très négatifs")
+                f"{len(classified['positive'])} positifs, {len(classified['neutral'])} neutres, "
+                f"{len(classified['negative'])} négatifs, {len(classified['very_negative'])} très négatifs")
         
         return classified
-    
+        
     async def _analyze_content_sentiment(self, text: str) -> Dict:
         """Analyser le sentiment réel d'un contenu avec l'IA"""
+        
+        # ✅ CORRECTION: Toujours retourner un dict valide par défaut
+        default_result = {
+            'category': 'neutral',
+            'score': 0,
+            'reasoning': 'Analyse par défaut'
+        }
+        
+        if not text or len(text.strip()) < 10:
+            return default_result
         
         if not self.llm_service.is_available():
             # Fallback simple
             return self._simple_sentiment_analysis(text)
         
         prompt = f"""
-Analyse le sentiment de ce contenu et évalue s'il est positif, négatif ou neutre 
-pour l'image d'une organisation/personnalité publique.
+    Analyse le sentiment de ce contenu et évalue s'il est positif, négatif ou neutre 
+    pour l'image d'une organisation/personnalité publique.
 
-CONTENU À ANALYSER:
-{text[:2000]}
+    CONTENU À ANALYSER:
+    {text[:2000]}
 
-Réponds UNIQUEMENT avec ce format JSON:
-{{
-    "category": "very_positive" | "positive" | "neutral" | "negative" | "very_negative",
-    "score": <-10 à +10>,
-    "reasoning": "<explication courte en 1-2 phrases>"
-}}
+    Réponds UNIQUEMENT avec ce format JSON:
+    {{
+        "category": "very_positive" | "positive" | "neutral" | "negative" | "very_negative",
+        "score": <-10 à +10>,
+        "reasoning": "<explication courte en 1-2 phrases>"
+    }}
 
-Sois précis et objectif. Base-toi sur le ton, les mots utilisés, et l'intention apparente.
-"""
+    Sois précis et objectif. Base-toi sur le ton, les mots utilisés, et l'intention apparente.
+    """
         
         try:
             context = {'mentions': [{'content': text}], 'keywords': [], 'period_days': 1}
             response = await self.llm_service.analyze_with_local_llm(prompt, context)
+            
+            # ✅ Vérifier que la réponse n'est pas None
+            if not response:
+                logger.warning("Réponse LLM vide, utilisation du fallback")
+                return self._simple_sentiment_analysis(text)
             
             # Parser la réponse JSON
             import re
             json_match = re.search(r'\{.*\}', response, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group())
-                return result
-            else:
-                return self._simple_sentiment_analysis(text)
                 
-        except Exception as e:
-            logger.warning(f"Erreur analyse sentiment IA: {e}")
+                # Valider que les champs requis existent
+                required_fields = ['category', 'score', 'reasoning']
+                if all(field in result for field in required_fields):
+                    # Valider que la catégorie est valide
+                    valid_categories = ['very_positive', 'positive', 'neutral', 'negative', 'very_negative']
+                    if result['category'] in valid_categories:
+                        return result
+                    else:
+                        logger.warning(f"Catégorie invalide: {result.get('category')}, utilisation du fallback")
+                else:
+                    missing = [f for f in required_fields if f not in result]
+                    logger.warning(f"Champs manquants dans la réponse LLM: {missing}, utilisation du fallback")
+            
+            # Si le parsing échoue, utiliser le fallback
             return self._simple_sentiment_analysis(text)
-    
+                
+        except json.JSONDecodeError as e:
+            logger.warning(f"Erreur parsing JSON LLM: {e}, utilisation du fallback")
+            return self._simple_sentiment_analysis(text)
+        except Exception as e:
+            logger.error(f"Erreur analyse sentiment IA: {e}, utilisation du fallback")
+            return self._simple_sentiment_analysis(text)
+        
     def _simple_sentiment_analysis(self, text: str) -> Dict:
         """Analyse de sentiment simple (fallback)"""
+        
+        if not text or len(text.strip()) < 10:
+            return {
+                'category': 'neutral',
+                'score': 0,
+                'reasoning': 'Texte trop court'
+            }
         
         text_lower = text.lower()
         
         # Mots fortement positifs
         very_positive_words = ['excellent', 'extraordinaire', 'remarquable', 'brillant', 'génial', 
-                               'succès', 'victoire', 'triomphe', 'félicitations', 'innovation']
+                            'succès', 'victoire', 'triomphe', 'félicitations', 'innovation']
         
         # Mots positifs
         positive_words = ['bon', 'bien', 'positif', 'amélioration', 'progrès', 'efficace',
-                         'satisfaisant', 'apprécié', 'soutien', 'reconnaissance']
+                        'satisfaisant', 'apprécié', 'soutien', 'reconnaissance']
         
         # Mots négatifs
         negative_words = ['mauvais', 'problème', 'échec', 'erreur', 'difficulté', 'critique',
-                         'insuffisant', 'décevant', 'préoccupant', 'insatisfaction']
+                        'insuffisant', 'décevant', 'préoccupant', 'insatisfaction']
         
         # Mots fortement négatifs
         very_negative_words = ['scandale', 'catastrophe', 'désastre', 'corruption', 'fraude',
-                              'crise', 'effondrement', 'inacceptable', 'honte', 'tragédie']
+                            'crise', 'effondrement', 'inacceptable', 'honte', 'tragédie']
         
         # Compter les occurrences
         very_pos_count = sum(1 for word in very_positive_words if word in text_lower)
@@ -236,6 +315,7 @@ Sois précis et objectif. Base-toi sur le ton, les mots utilisés, et l'intentio
             category = 'neutral'
             reasoning = "Ton neutre et factuel"
         
+        # ✅ CORRECTION: S'assurer de toujours retourner un dict complet
         return {
             'category': category,
             'score': score,
