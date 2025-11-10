@@ -12,6 +12,7 @@ from collections import Counter
 import json
 import asyncio
 from io import BytesIO
+import statistics
 
 from app.ai_service import IntelligentAnalysisAgent, AnalysisContext, SovereignLLMService
 from app.models import Keyword, Mention
@@ -26,6 +27,211 @@ class IntelligentReportGenerator:
         self.db = db
         self.ai_agent = IntelligentAnalysisAgent()
         self.llm_service = SovereignLLMService()
+    
+    async def generate_complete_report(
+        self,
+        keyword_ids: List[int],
+        days: int = 30,
+        report_title: str = "",
+        include_web_analysis: bool = True,
+        format_type: str = "pdf"
+    ) -> Dict:
+        """
+        Générer un rapport complet avec analyse IA avancée
+        
+        Cette méthode génère un rapport détaillé incluant:
+        - Analyse de sentiment avancée
+        - Détection de tendances
+        - Analyse des influenceurs
+        - Extraction et analyse du contenu web (optionnel)
+        - Recommandations actionnables
+        """
+        logger.info(f"🤖 Génération rapport complet IA: {len(keyword_ids)} mots-clés, {days} jours")
+        
+        try:
+            # 1. Récupérer les données de base
+            since_date = datetime.utcnow() - timedelta(days=days)
+            
+            mentions = self.db.query(Mention).filter(
+                Mention.keyword_id.in_(keyword_ids),
+                Mention.published_at >= since_date
+            ).order_by(desc(Mention.published_at)).all()
+            
+            if not mentions:
+                logger.warning("Aucune mention trouvée pour générer le rapport")
+                return {
+                    'error': 'Aucune mention trouvée pour cette période',
+                    'metadata': {
+                        'title': report_title or "Rapport IA",
+                        'keywords': [self._get_keyword_name(kid) for kid in keyword_ids],
+                        'period_days': days,
+                        'total_mentions': 0
+                    }
+                }
+            
+            logger.info(f"📊 {len(mentions)} mentions à analyser")
+            
+            # 2. Construire le contexte d'analyse
+            context = self._build_analysis_context(mentions, keyword_ids, days)
+            
+            # 3. Si demandé, enrichir avec le contenu web
+            if include_web_analysis:
+                logger.info("🌐 Enrichissement avec analyse web...")
+                context = await self.ai_agent._enrich_context_with_web_content(context, self.db)
+            
+            # 4. Lancer l'analyse intelligente complète
+            logger.info("🧠 Analyse IA en cours...")
+            analyses = await self.ai_agent.generate_intelligent_report(context, self.db)
+            
+            # 5. Compiler le rapport final
+            report_data = {
+                'metadata': {
+                    'title': report_title or "Rapport Intelligent IA",
+                    'keywords': [self._get_keyword_name(kid) for kid in keyword_ids],
+                    'period_days': days,
+                    'generated_at': datetime.utcnow(),
+                    'format': format_type,
+                    'total_mentions': len(mentions),
+                    'web_analysis_included': include_web_analysis,
+                    'web_sources_analyzed': len(context.web_content) if context.web_content else 0
+                },
+                'analyses': analyses,
+                'raw_data': {
+                    'mentions_sample': self._format_mentions_sample(mentions[:10]),
+                    'sentiment_distribution': context.sentiment_distribution,
+                    'top_sources': context.top_sources,
+                    'engagement_stats': context.engagement_stats
+                }
+            }
+            
+            logger.info("✅ Rapport complet IA généré avec succès")
+            return report_data
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de la génération du rapport complet: {e}", exc_info=True)
+            raise
+    
+    def _build_analysis_context(self, mentions: List[Mention], keyword_ids: List[int], days: int) -> AnalysisContext:
+        """Construire le contexte d'analyse à partir des mentions"""
+        
+        # Préparer les données des mentions
+        mentions_data = []
+        for mention in mentions:
+            mentions_data.append({
+                'id': mention.id,
+                'title': mention.title,
+                'content': mention.content,
+                'author': mention.author,
+                'source': mention.source,
+                'source_url': mention.source_url,
+                'engagement_score': mention.engagement_score,
+                'sentiment': mention.sentiment,
+                'published_at': mention.published_at.isoformat() if mention.published_at else None,
+                'metadata': json.loads(mention.mention_metadata) if mention.mention_metadata else {}
+            })
+        
+        # Calculer la distribution des sentiments
+        sentiment_distribution = {
+            'positive': sum(1 for m in mentions if m.sentiment == 'positive'),
+            'neutral': sum(1 for m in mentions if m.sentiment == 'neutral'),
+            'negative': sum(1 for m in mentions if m.sentiment == 'negative')
+        }
+        
+        # Top sources
+        from collections import Counter
+        source_counts = Counter(m.source for m in mentions)
+        top_sources = dict(source_counts.most_common(10))
+        
+        # Stats d'engagement
+        engagement_scores = [m.engagement_score for m in mentions if m.engagement_score]
+        engagement_stats = {
+            'total': sum(engagement_scores),
+            'average': statistics.mean(engagement_scores) if engagement_scores else 0,
+            'max': max(engagement_scores) if engagement_scores else 0,
+            'min': min(engagement_scores) if engagement_scores else 0
+        }
+        
+        # Données géographiques (placeholder)
+        geographic_data = []
+        
+        # Données influenceurs (top auteurs)
+        author_stats = {}
+        for mention in mentions:
+            author = mention.author
+            if author not in author_stats:
+                author_stats[author] = {
+                    'author': author,
+                    'source': mention.source,
+                    'total_engagement': 0,
+                    'mention_count': 0,
+                    'sentiments': []
+                }
+            
+            author_stats[author]['total_engagement'] += mention.engagement_score
+            author_stats[author]['mention_count'] += 1
+            if mention.sentiment:
+                author_stats[author]['sentiments'].append(mention.sentiment)
+        
+        # Trier par engagement
+        influencers_data = sorted(
+            author_stats.values(),
+            key=lambda x: x['total_engagement'],
+            reverse=True
+        )[:20]
+        
+        # Calculer le score de sentiment pour chaque influenceur
+        for inf in influencers_data:
+            sentiments = inf['sentiments']
+            if sentiments:
+                positive_pct = (sentiments.count('positive') / len(sentiments)) * 100
+                inf['sentiment_score'] = positive_pct
+            else:
+                inf['sentiment_score'] = 50  # Neutre par défaut
+        
+        # Tendances temporelles
+        from collections import defaultdict
+        date_counts = defaultdict(int)
+        for mention in mentions:
+            if mention.published_at:
+                date_key = mention.published_at.date().isoformat()
+                date_counts[date_key] += 1
+        
+        time_trends = [
+            {'date': date, 'count': count}
+            for date, count in sorted(date_counts.items())
+        ]
+        
+        # Créer le contexte
+        context = AnalysisContext(
+            mentions=mentions_data,
+            keywords=[self._get_keyword_name(kid) for kid in keyword_ids],
+            period_days=days,
+            total_mentions=len(mentions),
+            sentiment_distribution=sentiment_distribution,
+            top_sources=top_sources,
+            engagement_stats=engagement_stats,
+            geographic_data=geographic_data,
+            influencers_data=influencers_data,
+            time_trends=time_trends,
+            web_content=None
+        )
+        
+        return context
+    
+    def _format_mentions_sample(self, mentions: List[Mention]) -> List[Dict]:
+        """Formater un échantillon de mentions pour le rapport"""
+        sample = []
+        for mention in mentions:
+            sample.append({
+                'title': mention.title,
+                'source': mention.source,
+                'author': mention.author,
+                'sentiment': mention.sentiment,
+                'engagement': mention.engagement_score,
+                'url': mention.source_url,
+                'published_at': mention.published_at.isoformat() if mention.published_at else None
+            })
+        return sample
     
     async def generate_executive_report(
         self,
@@ -188,7 +394,7 @@ class IntelligentReportGenerator:
                 f"{len(classified['negative'])} négatifs, {len(classified['very_negative'])} très négatifs")
         
         return classified
-        
+    
     async def _analyze_content_sentiment(self, text: str) -> Dict:
         """Analyser le sentiment réel d'un contenu avec l'IA"""
         
@@ -207,21 +413,21 @@ class IntelligentReportGenerator:
             return self._simple_sentiment_analysis(text)
         
         prompt = f"""
-    Analyse le sentiment de ce contenu et évalue s'il est positif, négatif ou neutre 
-    pour l'image d'une organisation/personnalité publique.
+Analyse le sentiment de ce contenu et évalue s'il est positif, négatif ou neutre 
+pour l'image d'une organisation/personnalité publique.
 
-    CONTENU À ANALYSER:
-    {text[:2000]}
+CONTENU À ANALYSER:
+{text[:2000]}
 
-    Réponds UNIQUEMENT avec ce format JSON:
-    {{
-        "category": "very_positive" | "positive" | "neutral" | "negative" | "very_negative",
-        "score": <-10 à +10>,
-        "reasoning": "<explication courte en 1-2 phrases>"
-    }}
+Réponds UNIQUEMENT avec ce format JSON:
+{{
+    "category": "very_positive" | "positive" | "neutral" | "negative" | "very_negative",
+    "score": <-10 à +10>,
+    "reasoning": "<explication courte en 1-2 phrases>"
+}}
 
-    Sois précis et objectif. Base-toi sur le ton, les mots utilisés, et l'intention apparente.
-    """
+Sois précis et objectif. Base-toi sur le ton, les mots utilisés, et l'intention apparente.
+"""
         
         try:
             context = {'mentions': [{'content': text}], 'keywords': [], 'period_days': 1}
@@ -260,7 +466,7 @@ class IntelligentReportGenerator:
         except Exception as e:
             logger.error(f"Erreur analyse sentiment IA: {e}, utilisation du fallback")
             return self._simple_sentiment_analysis(text)
-        
+    
     def _simple_sentiment_analysis(self, text: str) -> Dict:
         """Analyse de sentiment simple (fallback)"""
         

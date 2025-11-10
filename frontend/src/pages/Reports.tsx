@@ -28,7 +28,14 @@ import { Card, Badge, PageLoading, Modal, Alert, Tabs } from '@/components/ui/in
 import toast from 'react-hot-toast';
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';;
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 600000, // 5 minutes pour l'IA
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 interface KeywordOption {
   id: number;
@@ -198,11 +205,26 @@ export default function IntelligentReports() {
     return;
   }
 
+  if (!aiStatusData?.ai_available) {
+    toast.error('Service IA non disponible. Vérifiez la configuration.');
+    return;
+  }
+
   setIsGenerating(true);
+  
+  // Toast avec progression
+  const loadingToast = toast.loading(
+    '🤖 Analyse IA en cours... Lecture des contenus, classification, synthèse... Patientez 2-5 min',
+    { duration: 600000 }
+  );
 
   try {
-    const response = await axios.post(
-      `${API_BASE_URL}/api/intelligent-reports/generate-executive`,
+    console.log('🚀 Début génération rapport exécutif');
+    console.log('Mots-clés:', selectedKeywords);
+    console.log('Période:', periodDays);
+    
+    const response = await apiClient.post(
+      '/api/intelligent-reports/generate-executive',
       {
         keyword_ids: selectedKeywords,
         days: periodDays,
@@ -211,10 +233,24 @@ export default function IntelligentReports() {
       },
       {
         responseType: 'blob',
+        onDownloadProgress: (progressEvent) => {
+          if (progressEvent.loaded > 0) {
+            toast.loading('📥 Réception du rapport...', { id: loadingToast });
+          }
+        }
       }
     );
 
-    // Télécharger
+    console.log('✅ Rapport reçu, taille:', response.data.size);
+    
+    toast.dismiss(loadingToast);
+
+    // Vérifier que le blob n'est pas vide
+    if (response.data.size === 0) {
+      throw new Error('Le rapport généré est vide');
+    }
+
+    // Télécharger le fichier
     const blob = new Blob([response.data], { 
       type: format === 'pdf' ? 'application/pdf' : 'text/html' 
     });
@@ -227,14 +263,31 @@ export default function IntelligentReports() {
     document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
 
-    toast.success('🎯 Rapport exécutif généré !');
+    toast.success('🎯 Rapport exécutif généré avec succès !', { duration: 5000 });
+    
   } catch (error: any) {
-    console.error('Erreur:', error);
-    toast.error('Erreur lors de la génération du rapport exécutif');
+    console.error('❌ Erreur génération rapport:', error);
+    toast.dismiss(loadingToast);
+    
+    let errorMsg = 'Erreur lors de la génération du rapport exécutif';
+    
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      errorMsg = '⏱️ Timeout: Le rapport prend trop de temps. Essayez avec moins de données ou une période plus courte.';
+    } else if (error.code === 'ERR_NETWORK') {
+      errorMsg = '🔌 Erreur réseau: Vérifiez que le backend est accessible et qu\'Ollama fonctionne.';
+    } else if (error.response?.status === 500) {
+      errorMsg = '🤖 Erreur serveur: ' + (error.response?.data?.detail || 'Problème avec l\'analyse IA');
+    } else if (error.response?.status === 400) {
+      errorMsg = error.response?.data?.detail || 'Données invalides';
+    }
+    
+    toast.error(errorMsg, { duration: 7000 });
+    
   } finally {
     setIsGenerating(false);
   }
 };
+
 
   const handlePreview = async () => {
     if (selectedKeywords.length === 0) {

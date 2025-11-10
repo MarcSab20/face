@@ -1,64 +1,31 @@
 #!/bin/bash
-# Solution de contournement : Proxy IPv4 -> IPv6 pour Ollama
-# À utiliser si Ollama refuse d'écouter en IPv4
 
-echo "🔀 Installation du proxy IPv4 -> IPv6 pour Ollama"
-echo "=================================================="
+echo "🔍 Diagnostic de connexion Ollama..."
 
-# 1. Installer socat si nécessaire
-if ! command -v socat &> /dev/null; then
-    echo "📦 Installation de socat..."
-    sudo apt-get update -qq
-    sudo apt-get install -y socat
-fi
+# Trouver l'adresse IP de la gateway Docker
+GATEWAY_IP=$(docker network inspect bridge | grep Gateway | awk '{print $2}' | tr -d '",')
+echo "Gateway Docker: $GATEWAY_IP"
 
-# 2. Créer un service systemd pour le proxy
-echo "📝 Création du service proxy..."
+# Tester la connexion Ollama sur différents ports
+for PORT in 11434 11435; do
+    echo "Test connexion http://${GATEWAY_IP}:${PORT}..."
+    if curl -s "http://${GATEWAY_IP}:${PORT}/api/tags" > /dev/null 2>&1; then
+        echo "✅ Ollama accessible sur http://${GATEWAY_IP}:${PORT}"
+        echo "OLLAMA_HOST=http://${GATEWAY_IP}:${PORT}" > .env.ollama
+        exit 0
+    fi
+done
 
-sudo tee /etc/systemd/system/ollama-ipv4-proxy.service > /dev/null <<'EOF'
-[Unit]
-Description=Ollama IPv4 Proxy (IPv4 -> IPv6)
-After=ollama.service
-Requires=ollama.service
+# Tester localhost
+for PORT in 11434 11435; do
+    echo "Test connexion http://localhost:${PORT}..."
+    if curl -s "http://localhost:${PORT}/api/tags" > /dev/null 2>&1; then
+        echo "✅ Ollama accessible sur http://localhost:${PORT}"
+        echo "OLLAMA_HOST=http://host.docker.internal:${PORT}" > .env.ollama
+        exit 0
+    fi
+done
 
-[Service]
-Type=simple
-ExecStart=/usr/bin/socat TCP4-LISTEN:11435,fork,reuseaddr TCP6:[::1]:11434
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# 3. Activer et démarrer le proxy
-echo "▶️  Démarrage du proxy..."
-sudo systemctl daemon-reload
-sudo systemctl enable ollama-ipv4-proxy
-sudo systemctl start ollama-ipv4-proxy
-
-# 4. Vérifier
-sleep 2
-echo ""
-echo "🔍 Vérification..."
-sudo netstat -tulpn | grep -E '11434|11435'
-echo ""
-
-# 5. Test
-echo "🧪 Test du proxy..."
-if curl -s http://127.0.0.1:11435/api/tags > /dev/null 2>&1; then
-    echo "✅ Proxy fonctionnel sur le port 11435 (IPv4)"
-    echo ""
-    echo "📋 Configuration Docker :"
-    echo "  environment:"
-    echo "    - OLLAMA_HOST=http://172.17.0.1:11435"
-    echo ""
-else
-    echo "❌ Proxy non fonctionnel"
-fi
-
-echo "=================================================="
-echo "PORTS DISPONIBLES :"
-echo "  - 11434 : Ollama IPv6 (original)"
-echo "  - 11435 : Proxy IPv4 (pour Docker)"
-echo "=================================================="
+echo "❌ Ollama non accessible. Vérifiez qu'Ollama est démarré."
+echo "Commande: ollama serve"
+exit 1
