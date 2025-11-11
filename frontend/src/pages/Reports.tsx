@@ -312,6 +312,89 @@ export default function IntelligentReports() {
     }
   };
 
+  const handleGenerateStrategicReport = async () => {
+  if (selectedKeywords.length === 0 || !reportTitle.trim()) {
+    toast.error('Veuillez sélectionner des mots-clés et saisir un titre');
+    return;
+  }
+
+  if (!aiStatusData?.ai_available) {
+    toast.error('Service IA non disponible. Vérifiez la configuration.');
+    return;
+  }
+
+  setIsGenerating(true);
+  
+  const loadingToast = toast.loading(
+    '🎯 Génération rapport stratégique... Classification, analyse activistes, synthèse... Patientez 2-5 min',
+    { duration: 600000 }
+  );
+
+  try {
+    console.info('🚀 Début génération rapport stratégique');
+    
+    const response = await apiClient.post(
+      '/api/intelligent-reports/generate-strategic',
+      {
+        keyword_ids: selectedKeywords,
+        days: periodDays,
+        report_title: reportTitle,
+        format: format,
+      },
+      {
+        responseType: 'blob',
+        onDownloadProgress: (progressEvent) => {
+          if (progressEvent.loaded > 0) {
+            toast.loading('📥 Réception du rapport...', { id: loadingToast });
+          }
+        }
+      }
+    );
+    
+    toast.dismiss(loadingToast);
+
+    if (response.data.size === 0) {
+      throw new Error('Le rapport généré est vide');
+    }
+
+    // Télécharger le fichier
+    const blob = new Blob([response.data], { 
+      type: format === 'pdf' ? 'application/pdf' : 'text/html' 
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `rapport_strategique_${new Date().toISOString().split('T')[0]}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    toast.success('🎯 Rapport stratégique généré avec succès !', { duration: 5000 });
+    
+  } catch (error: any) {
+    console.error('❌ Erreur génération rapport:', error);
+    toast.dismiss(loadingToast);
+    
+    let errorMsg = 'Erreur lors de la génération du rapport stratégique';
+    
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      errorMsg = '⏱️ Timeout: Le rapport prend trop de temps. Essayez avec moins de données.';
+    } else if (error.code === 'ERR_NETWORK') {
+      errorMsg = '🔌 Erreur réseau: Vérifiez que le backend est accessible.';
+    } else if (error.response?.status === 500) {
+      errorMsg = '🤖 Erreur serveur: ' + (error.response?.data?.detail || 'Problème avec l\'analyse IA');
+    } else if (error.response?.status === 400) {
+      errorMsg = error.response?.data?.detail || 'Données invalides';
+    }
+    
+    toast.error(errorMsg, { duration: 7000 });
+    
+  } finally {
+    setIsGenerating(false);
+  }
+};
+
   const getRiskColor = (riskLevel?: string) => {
     switch (riskLevel) {
       case 'ÉLEVÉ': return 'text-red-600';
@@ -608,6 +691,33 @@ export default function IntelligentReports() {
                 >
                   <Eye className="w-4 h-4" />
                   <span>Prévisualiser IA</span>
+                </button>
+
+                <button
+                  onClick={handleGenerateStrategicReport}
+                  disabled={
+                    selectedKeywords.length === 0 ||
+                    !reportTitle.trim() ||
+                    isGenerating ||
+                    !aiStatusData?.ai_available
+                  }
+                  className="btn w-full flex items-center justify-center space-x-2"
+                  style={{
+                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                    color: 'white'
+                  }}
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Génération...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-4 h-4" />
+                      <span>Rapport Stratégique (C-I)</span>
+                    </>
+                  )}
                 </button>
 
                 <button

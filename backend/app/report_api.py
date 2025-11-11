@@ -476,6 +476,104 @@ async def get_ai_capabilities():
         ]
     }
 
+@intelligent_reports_router.post("/generate-strategic")
+async def generate_strategic_report(
+    request: IntelligentReportRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Générer un rapport stratégique optimisé pour communication/contre-information
+    
+    Structure en 5 sections majeures:
+    1. Synthèse Générale Stratégique
+    2. Contenus à Tonalité Positive
+    3. Contenus à Tonalité Négative  
+    4. Contenus à Tonalité Neutre
+    5. Activistes et Comptes Sensibles
+    """
+    try:
+        logger.info(f"🎯 Démarrage génération rapport stratégique")
+        
+        # Vérifier les paramètres
+        keywords = db.query(Keyword).filter(Keyword.id.in_(request.keyword_ids)).all()
+        if not keywords:
+            raise HTTPException(status_code=404, detail="Aucun mot-clé trouvé")
+        
+        logger.info(f"Mots-clés: {[k.keyword for k in keywords]}")
+        
+        # Vérifier les données
+        since_date = datetime.utcnow() - timedelta(days=request.days)
+        mentions_count = db.query(Mention).filter(
+            Mention.keyword_id.in_(request.keyword_ids),
+            Mention.published_at >= since_date
+        ).count()
+        
+        if mentions_count == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Aucune mention trouvée pour cette période"
+            )
+        
+        # Initialiser le générateur stratégique
+        from app.strategic_report_generator import StrategicReportGenerator
+        generator = StrategicReportGenerator(db)
+        
+        # Générer le rapport stratégique
+        start_time = datetime.utcnow()
+        logger.info("🤖 Analyse IA stratégique en cours...")
+        
+        report_data = await generator.generate_strategic_report(
+            keyword_ids=request.keyword_ids,
+            days=request.days,
+            report_title=request.report_title or "Rapport Stratégique"
+        )
+        
+        processing_time = (datetime.utcnow() - start_time).total_seconds()
+        logger.info(f"✅ Rapport généré en {processing_time:.1f}s")
+        
+        # Générer le HTML
+        from app.strategic_report_template import generate_strategic_report_html
+        html_content = generate_strategic_report_html(report_data)
+        
+        if request.format == 'pdf':
+            # Convertir en PDF avec WeasyPrint
+            try:
+                from weasyprint import HTML
+                
+                pdf_bytes = HTML(string=html_content).write_pdf()
+                
+                return Response(
+                    content=pdf_bytes,
+                    media_type="application/pdf",
+                    headers={
+                        "Content-Disposition": f"attachment; filename=rapport_strategique_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
+                    }
+                )
+            except Exception as e:
+                logger.error(f"❌ Erreur génération PDF: {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Erreur lors de la génération du PDF: {str(e)}"
+                )
+        else:
+            # Retourner HTML
+            return Response(
+                content=html_content,
+                media_type="text/html",
+                headers={
+                    "Content-Disposition": f"attachment; filename=rapport_strategique_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html"
+                }
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Erreur inattendue génération rapport stratégique: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erreur inattendue: {str(e)}"
+        )
+
 
 @intelligent_reports_router.get("/examples")
 async def get_ai_analysis_examples():
