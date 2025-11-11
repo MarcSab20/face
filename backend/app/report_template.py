@@ -3,6 +3,8 @@ Template HTML Professionnel pour Rapports Stratégiques
 Style inspiration Redaction.pdf
 """
 
+from datetime import datetime
+
 def generate_strategic_report_html(report_data: dict) -> str:
     """Générer le HTML du rapport stratégique"""
     
@@ -22,6 +24,207 @@ def generate_strategic_report_html(report_data: dict) -> str:
     }
     risk_color = risk_colors.get(risk_level, '#6b7280')
     
+    # Construction des sections HTML complexes AVANT le f-string principal
+    
+    # Section Messages Clés Positifs
+    positive_messages_html = ""
+    if positive.get('key_messages'):
+        messages_items = "".join([f"<li>{msg}</li>" for msg in positive.get('key_messages', [])])
+        positive_messages_html = f"""
+        <h3>Messages Clés Positifs</h3>
+        <ul>
+            {messages_items}
+        </ul>
+        """
+    
+    # Section Top Contenus Positifs
+    positive_contents_html = ""
+    if positive.get('top_contents'):
+        contents_items = "".join([
+            f"""<div class="content-item">
+                <div class="content-title">{content.get('title', 'Sans titre')}</div>
+                <div class="content-meta">
+                    <span class="badge badge-low">{content.get('source', 'N/A')}</span>
+                    Par {content.get('author', 'Inconnu')} • 
+                    Engagement: {content.get('engagement_score', 0):,.0f}
+                </div>
+            </div>"""
+            for content in positive.get('top_contents', [])[:5]
+        ])
+        positive_contents_html = f"""
+        <h3>Top Contenus Positifs</h3>
+        {contents_items}
+        """
+    
+    # Section Recommandations Positives
+    positive_recommendations_html = "".join([f"<li>{rec}</li>" for rec in positive.get('recommendations', [])])
+    
+    # Section Critiques Négatives
+    negative_criticisms_html = ""
+    if negative.get('key_criticisms'):
+        criticisms_items = "".join([f"<li>{crit}</li>" for crit in negative.get('key_criticisms', [])])
+        negative_criticisms_html = f"""
+        <h3>Principales Critiques Identifiées</h3>
+        <ul>
+            {criticisms_items}
+        </ul>
+        """
+    
+    # Section Top Contenus Négatifs
+    negative_contents_html = ""
+    if negative.get('top_contents'):
+        neg_contents_items = "".join([
+            f"""<div class="content-item" style="border-left: 3px solid #ef4444;">
+                <div class="content-title">{content.get('title', 'Sans titre')}</div>
+                <div class="content-meta">
+                    <span class="badge badge-critical">{content.get('strategic_impact', 'N/A').upper()}</span>
+                    <span class="badge badge-high">{content.get('source', 'N/A')}</span>
+                    Par {content.get('author', 'Inconnu')} • 
+                    Engagement: {content.get('engagement_score', 0):,.0f}
+                </div>
+            </div>"""
+            for content in negative.get('top_contents', [])[:5]
+        ])
+        negative_contents_html = f"""
+        <h3>Top Contenus Critiques (Surveillance Prioritaire)</h3>
+        {neg_contents_items}
+        """
+    
+    # Section Recommandations Négatives
+    negative_recommendations_html = "".join([
+        f"""<div class="recommendation">
+            <div class="recommendation-priority">ACTION REQUISE</div>
+            {rec}
+        </div>"""
+        for rec in negative.get('recommendations', [])
+    ])
+    
+    # Section Opportunités Neutres
+    neutral_opportunities_html = ""
+    if neutral.get('opportunities'):
+        opportunities_items = "".join([f"<li>{opp}</li>" for opp in neutral.get('opportunities', [])])
+        neutral_opportunities_html = f"""
+        <h3>Opportunités de Positionnement</h3>
+        <ul>
+            {opportunities_items}
+        </ul>
+        """
+    
+    # Section Contenus Neutres
+    neutral_contents_html = ""
+    if neutral.get('top_contents'):
+        neutral_contents_items = "".join([
+            f"""<div class="content-item">
+                <div class="content-title">{content.get('title', 'Sans titre')}</div>
+                <div class="content-meta">
+                    <span class="badge badge-medium">{content.get('source', 'N/A')}</span>
+                    Par {content.get('author', 'Inconnu')} • 
+                    Engagement: {content.get('engagement_score', 0):,.0f}
+                </div>
+            </div>"""
+            for content in neutral.get('top_contents', [])[:3]
+        ])
+        neutral_contents_html = f"""
+        <h3>Principaux Contenus Neutres</h3>
+        {neutral_contents_items}
+        """
+    
+    # Section Activistes Prioritaires
+    priority_activists_html = '<p>Aucun activiste prioritaire identifié.</p>'
+    if activists.get('priority_activists'):
+        activists_items = "".join([
+            f"""<div class="activist-item">
+                <div class="activist-name">🔴 {activist.get('author', 'Inconnu')}</div>
+                <div class="activist-stats">
+                    <span class="badge badge-critical">{activist.get('alert_level', 'N/A')}</span>
+                    {activist.get('total_contents', 0)} contenu(s) • 
+                    Engagement total: {activist.get('total_engagement', 0):,.0f} • 
+                    Négatif: {activist.get('negative_ratio', 0)}%
+                </div>
+            </div>"""
+            for activist in activists.get('priority_activists', [])[:10]
+        ])
+        priority_activists_html = f"""
+        <h3>⚠️ Activistes Prioritaires (Surveillance Critique)</h3>
+        {activists_items}
+        """
+    
+    # Section Activistes Connus
+    known_activists_html = '<p>Aucun activiste connu détecté durant cette période.</p>'
+    if activists.get('known_activists'):
+        known_rows = "".join([
+            f"""<tr>
+                <td><strong>{activist.get('author', 'Inconnu')}</strong></td>
+                <td>{activist.get('total_contents', 0)}</td>
+                <td>{activist.get('total_engagement', 0):,.0f}</td>
+                <td>
+                    {f"{sum(1 for t in activist.get('tones', []) if t in ['negative', 'very_negative'])}/{len(activist.get('tones', []))} négatifs" if activist.get('tones') else 'N/A'}
+                </td>
+            </tr>"""
+            for activist in activists.get('known_activists', [])[:20]
+        ])
+        known_activists_html = f"""
+        <h3>Activistes Connus Détectés</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Nom</th>
+                    <th>Contenus</th>
+                    <th>Engagement</th>
+                    <th>Tonalité</th>
+                </tr>
+            </thead>
+            <tbody>
+                {known_rows}
+            </tbody>
+        </table>
+        """
+    
+    # Section Comptes Suspects
+    suspicious_accounts_html = '<p>Aucun compte suspect identifié.</p>'
+    if activists.get('suspicious_accounts'):
+        suspect_rows = "".join([
+            f"""<tr>
+                <td><strong>{suspect.get('author', 'Inconnu')}</strong></td>
+                <td>{suspect.get('total_contents', 0)}</td>
+                <td>{suspect.get('total_engagement', 0):,.0f}</td>
+                <td>
+                    {f"{sum(1 for t in suspect.get('tones', []) if t in ['negative', 'very_negative'])}/{len(suspect.get('tones', []))} négatifs" if suspect.get('tones') else 'N/A'}
+                </td>
+            </tr>"""
+            for suspect in activists.get('suspicious_accounts', [])[:10]
+        ])
+        suspicious_accounts_html = f"""
+        <h3>Comptes Suspects Identifiés (Non Répertoriés)</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Compte</th>
+                    <th>Contenus</th>
+                    <th>Engagement</th>
+                    <th>Tonalité</th>
+                </tr>
+            </thead>
+            <tbody>
+                {suspect_rows}
+            </tbody>
+        </table>
+        """
+    
+    # Section Recommandations Prioritaires
+    priority_recommendations_html = "".join([
+        f"""<div class="recommendation">
+            <div class="recommendation-priority">{rec.get('priority', 'N/A')}</div>
+            <strong>{rec.get('action', 'N/A')}</strong><br>
+            <span style="font-size: 9pt; color: #6b7280;">Timeline: {rec.get('timeline', 'N/A')}</span>
+        </div>"""
+        for rec in synthesis.get('priority_recommendations', [])
+    ])
+    
+    # Section Points Stratégiques
+    strategic_points_html = "".join([f"<li>{point}</li>" for point in synthesis.get('strategic_points', [])])
+    
+    # MAINTENANT on construit le HTML principal
     html = f"""
 <!DOCTYPE html>
 <html lang="fr">
@@ -347,18 +550,11 @@ def generate_strategic_report_html(report_data: dict) -> str:
         
         <h3>Points Stratégiques Clés</h3>
         <ul>
-            {"".join([f"<li>{point}</li>" for point in synthesis.get('strategic_points', [])])}
+            {strategic_points_html}
         </ul>
         
         <h3>Recommandations Prioritaires</h3>
-        {"".join([
-            f'''<div class="recommendation">
-                <div class="recommendation-priority">{rec.get('priority', 'N/A')}</div>
-                <strong>{rec.get('action', 'N/A')}</strong><br>
-                <span style="font-size: 9pt; color: #6b7280;">Timeline: {rec.get('timeline', 'N/A')}</span>
-            </div>'''
-            for rec in synthesis.get('priority_recommendations', [])
-        ])}
+        {priority_recommendations_html}
     </div>
     
     <!-- ====== SECTION 2: TONALITÉ POSITIVE ====== -->
@@ -370,31 +566,13 @@ def generate_strategic_report_html(report_data: dict) -> str:
             <p>{positive.get('synthesis', 'Aucune synthèse disponible.')}</p>
         </div>
         
-        {f'''
-        <h3>Messages Clés Positifs</h3>
-        <ul>
-            {"".join([f"<li>{msg}</li>" for msg in positive.get('key_messages', [])])}
-        </ul>
-        ''' if positive.get('key_messages') else ''}
+        {positive_messages_html}
         
-        {f'''
-        <h3>Top Contenus Positifs</h3>
-        {"".join([
-            f'''<div class="content-item">
-                <div class="content-title">{content.get('title', 'Sans titre')}</div>
-                <div class="content-meta">
-                    <span class="badge badge-low">{content.get('source', 'N/A')}</span>
-                    Par {content.get('author', 'Inconnu')} • 
-                    Engagement: {content.get('engagement_score', 0):,.0f}
-                </div>
-            </div>'''
-            for content in positive.get('top_contents', [])[:5]
-        ])}
-        ''' if positive.get('top_contents') else ''}
+        {positive_contents_html}
         
         <h3>Recommandations d'Exploitation</h3>
         <ul>
-            {"".join([f"<li>{rec}</li>" for rec in positive.get('recommendations', [])])}
+            {positive_recommendations_html}
         </ul>
     </div>
     
@@ -410,37 +588,12 @@ def generate_strategic_report_html(report_data: dict) -> str:
         <h3>Analyse des Contenus Critiques</h3>
         <p>{negative.get('synthesis', 'Aucune synthèse disponible.')}</p>
         
-        {f'''
-        <h3>Principales Critiques Identifiées</h3>
-        <ul>
-            {"".join([f"<li>{crit}</li>" for crit in negative.get('key_criticisms', [])])}
-        </ul>
-        ''' if negative.get('key_criticisms') else ''}
+        {negative_criticisms_html}
         
-        {f'''
-        <h3>Top Contenus Critiques (Surveillance Prioritaire)</h3>
-        {"".join([
-            f'''<div class="content-item" style="border-left: 3px solid #ef4444;">
-                <div class="content-title">{content.get('title', 'Sans titre')}</div>
-                <div class="content-meta">
-                    <span class="badge badge-critical">{content.get('strategic_impact', 'N/A').upper()}</span>
-                    <span class="badge badge-high">{content.get('source', 'N/A')}</span>
-                    Par {content.get('author', 'Inconnu')} • 
-                    Engagement: {content.get('engagement_score', 0):,.0f}
-                </div>
-            </div>'''
-            for content in negative.get('top_contents', [])[:5]
-        ])}
-        ''' if negative.get('top_contents') else ''}
+        {negative_contents_html}
         
         <h3>Recommandations de Contre-Information</h3>
-        {"".join([
-            f'''<div class="recommendation">
-                <div class="recommendation-priority">ACTION REQUISE</div>
-                {rec}
-            </div>'''
-            for rec in negative.get('recommendations', [])
-        ])}
+        {negative_recommendations_html}
     </div>
     
     <!-- ====== SECTION 4: TONALITÉ NEUTRE ====== -->
@@ -452,27 +605,9 @@ def generate_strategic_report_html(report_data: dict) -> str:
             <p>{neutral.get('synthesis', 'Aucune synthèse disponible.')}</p>
         </div>
         
-        {f'''
-        <h3>Opportunités de Positionnement</h3>
-        <ul>
-            {"".join([f"<li>{opp}</li>" for opp in neutral.get('opportunities', [])])}
-        </ul>
-        ''' if neutral.get('opportunities') else ''}
+        {neutral_opportunities_html}
         
-        {f'''
-        <h3>Principaux Contenus Neutres</h3>
-        {"".join([
-            f'''<div class="content-item">
-                <div class="content-title">{content.get('title', 'Sans titre')}</div>
-                <div class="content-meta">
-                    <span class="badge badge-medium">{content.get('source', 'N/A')}</span>
-                    Par {content.get('author', 'Inconnu')} • 
-                    Engagement: {content.get('engagement_score', 0):,.0f}
-                </div>
-            </div>'''
-            for content in neutral.get('top_contents', [])[:3]
-        ])}
-        ''' if neutral.get('top_contents') else ''}
+        {neutral_contents_html}
     </div>
     
     <!-- ====== SECTION 5: ACTIVISTES ET COMPTES SENSIBLES ====== -->
@@ -487,75 +622,11 @@ def generate_strategic_report_html(report_data: dict) -> str:
             </p>
         </div>
         
-        {f'''
-        <h3>⚠️ Activistes Prioritaires (Surveillance Critique)</h3>
-        {"".join([
-            f'''<div class="activist-item">
-                <div class="activist-name">🔴 {activist.get('author', 'Inconnu')}</div>
-                <div class="activist-stats">
-                    <span class="badge badge-critical">{activist.get('alert_level', 'N/A')}</span>
-                    {activist.get('total_contents', 0)} contenu(s) • 
-                    Engagement total: {activist.get('total_engagement', 0):,.0f} • 
-                    Négatif: {activist.get('negative_ratio', 0)}%
-                </div>
-            </div>'''
-            for activist in activists.get('priority_activists', [])[:10]
-        ])}
-        ''' if activists.get('priority_activists') else '<p>Aucun activiste prioritaire identifié.</p>'}
+        {priority_activists_html}
         
-        {f'''
-        <h3>Activistes Connus Détectés</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Nom</th>
-                    <th>Contenus</th>
-                    <th>Engagement</th>
-                    <th>Tonalité</th>
-                </tr>
-            </thead>
-            <tbody>
-                {"".join([
-                    f'''<tr>
-                        <td><strong>{activist.get('author', 'Inconnu')}</strong></td>
-                        <td>{activist.get('total_contents', 0)}</td>
-                        <td>{activist.get('total_engagement', 0):,.0f}</td>
-                        <td>
-                            {f"{sum(1 for t in activist.get('tones', []) if t in ['negative', 'very_negative'])}/{len(activist.get('tones', []))} négatifs" if activist.get('tones') else 'N/A'}
-                        </td>
-                    </tr>'''
-                    for activist in activists.get('known_activists', [])[:20]
-                ])}
-            </tbody>
-        </table>
-        ''' if activists.get('known_activists') else '<p>Aucun activiste connu détecté durant cette période.</p>'}
+        {known_activists_html}
         
-        {f'''
-        <h3>Comptes Suspects Identifiés (Non Répertoriés)</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Compte</th>
-                    <th>Contenus</th>
-                    <th>Engagement</th>
-                    <th>Tonalité</th>
-                </tr>
-            </thead>
-            <tbody>
-                {"".join([
-                    f'''<tr>
-                        <td><strong>{suspect.get('author', 'Inconnu')}</strong></td>
-                        <td>{suspect.get('total_contents', 0)}</td>
-                        <td>{suspect.get('total_engagement', 0):,.0f}</td>
-                        <td>
-                            {f"{sum(1 for t in suspect.get('tones', []) if t in ['negative', 'very_negative'])}/{len(suspect.get('tones', []))} négatifs" if suspect.get('tones') else 'N/A'}
-                        </td>
-                    </tr>'''
-                    for suspect in activists.get('suspicious_accounts', [])[:10]
-                ])}
-            </tbody>
-        </table>
-        ''' if activists.get('suspicious_accounts') else '<p>Aucun compte suspect identifié.</p>'}
+        {suspicious_accounts_html}
     </div>
     
     <!-- Footer -->

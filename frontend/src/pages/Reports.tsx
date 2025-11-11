@@ -31,7 +31,7 @@ import axios from 'axios';
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';;
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 600000, // 5 minutes pour l'IA
+  timeout: 6000000, // 5 minutes pour l'IA
   headers: {
     'Content-Type': 'application/json',
   },
@@ -215,7 +215,7 @@ export default function IntelligentReports() {
   // Toast avec progression
   const loadingToast = toast.loading(
     '🤖 Analyse IA en cours... Lecture des contenus, classification, synthèse... Patientez 2-5 min',
-    { duration: 600000 }
+    { duration: 6000000 }
   );
 
   try {
@@ -326,8 +326,8 @@ export default function IntelligentReports() {
   setIsGenerating(true);
   
   const loadingToast = toast.loading(
-    '🎯 Génération rapport stratégique... Classification, analyse activistes, synthèse... Patientez 2-5 min',
-    { duration: 600000 }
+    '🎯 Génération rapport stratégique... Classification, analyse activistes, synthèse... Patientez quelques minutes',
+    { duration: 6000000 }
   );
 
   try {

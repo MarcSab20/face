@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 
 from app.database import get_db
 from app.models import Keyword, Mention
-from app.report_generator import IntelligentReportGenerator
+from app.report_generator import StrategicReportGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -515,7 +515,7 @@ async def generate_strategic_report(
             )
         
         # Initialiser le générateur stratégique
-        from app.strategic_report_generator import StrategicReportGenerator
+        from app.report_generator import StrategicReportGenerator
         generator = StrategicReportGenerator(db)
         
         # Générer le rapport stratégique
@@ -532,7 +532,7 @@ async def generate_strategic_report(
         logger.info(f"✅ Rapport généré en {processing_time:.1f}s")
         
         # Générer le HTML
-        from app.strategic_report_template import generate_strategic_report_html
+        from app.report_template import generate_strategic_report_html
         html_content = generate_strategic_report_html(report_data)
         
         if request.format == 'pdf':
