@@ -11,12 +11,12 @@ def generate_strategic_report_v2_html(report_data: dict) -> str:
     metadata = report_data.get('metadata', {})
     synthesis = report_data.get('synthese_strategique', {})
     problematiques_data = report_data.get('problematiques_identifiees', {})
-        if isinstance(problematiques_data, dict):
-            problematiques = problematiques_data.get('problematiques', [])
-        elif isinstance(problematiques_data, list):
-            problematiques = problematiques_data
-        else:
-            problematiques = []
+    if isinstance(problematiques_data, dict):
+        problematiques = problematiques_data.get('problematiques', [])
+    elif isinstance(problematiques_data, list):
+        problematiques = problematiques_data
+    else:
+        problematiques = []
     activists = report_data.get('activistes_comptes_sensibles', {})
     stats = report_data.get('statistiques', {})
     

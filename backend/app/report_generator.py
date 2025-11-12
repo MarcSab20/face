@@ -98,7 +98,7 @@ class StrategicReportGeneratorV2:
                 'web_sources_analyzed': len(web_contents)
             },
             'synthese_strategique': strategic_synthesis,
-            'problematiques_identifiees': thematic_analysis('problematiques', []),
+            'problematiques_identifiees': thematic_analysis.get('problematiques', []),
             'activistes_comptes_sensibles': activists_data,
             'statistiques': self._generate_statistics(mentions)
         }
