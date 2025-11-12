@@ -199,6 +199,89 @@ export default function IntelligentReports() {
     }
   };
 
+  const handleGenerateStrategicReportV2 = async () => {
+  if (selectedKeywords.length === 0 || !reportTitle.trim()) {
+    toast.error('Veuillez sélectionner des mots-clés et saisir un titre');
+    return;
+  }
+
+  if (!aiStatusData?.ai_available) {
+    toast.error('Service IA non disponible. Vérifiez la configuration.');
+    return;
+  }
+
+  setIsGenerating(true);
+  
+  const loadingToast = toast.loading(
+    '🔍 Rapport V2: Lecture approfondie du contenu web... Analyse des articles, commentaires... Patientez',
+    { duration: 6000000 }
+  );
+
+  try {
+    console.info('🚀 Début génération rapport stratégique V2');
+    
+    const response = await apiClient.post(
+      '/api/intelligent-reports/generate-strategic-v2',
+      {
+        keyword_ids: selectedKeywords,
+        days: periodDays,
+        report_title: reportTitle,
+        format: format,
+      },
+      {
+        responseType: 'blob',
+        onDownloadProgress: (progressEvent) => {
+          if (progressEvent.loaded > 0) {
+            toast.loading('📥 Réception du rapport...', { id: loadingToast });
+          }
+        }
+      }
+    );
+    
+    toast.dismiss(loadingToast);
+
+    if (response.data.size === 0) {
+      throw new Error('Le rapport généré est vide');
+    }
+
+    // Télécharger le fichier
+    const blob = new Blob([response.data], { 
+      type: format === 'pdf' ? 'application/pdf' : 'text/html' 
+    });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `rapport_strategique_v2_${new Date().toISOString().split('T')[0]}.${format}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    toast.success('🔍 Rapport Stratégique V2 généré avec succès !', { duration: 5000 });
+    
+  } catch (error: any) {
+    console.error('❌ Erreur génération rapport:', error);
+    toast.dismiss(loadingToast);
+    
+    let errorMsg = 'Erreur lors de la génération du rapport stratégique V2';
+    
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      errorMsg = '⏱️ Timeout: Le rapport prend trop de temps. Essayez avec moins de données.';
+    } else if (error.code === 'ERR_NETWORK') {
+      errorMsg = '🔌 Erreur réseau: Vérifiez que le backend est accessible.';
+    } else if (error.response?.status === 500) {
+      errorMsg = '🤖 Erreur serveur: ' + (error.response?.data?.detail || 'Problème avec l\'analyse IA');
+    } else if (error.response?.status === 400) {
+      errorMsg = error.response?.data?.detail || 'Données invalides';
+    }
+    
+    toast.error(errorMsg, { duration: 7000 });
+    
+  } finally {
+    setIsGenerating(false);
+  }
+};
+
   const handleGenerateExecutiveReport = async () => {
   if (selectedKeywords.length === 0 || !reportTitle.trim()) {
     toast.error('Veuillez sélectionner des mots-clés et saisir un titre');
@@ -766,6 +849,33 @@ export default function IntelligentReports() {
                     <>
                       <Brain className="w-4 h-4" />
                       <span>Générer avec IA</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleGenerateStrategicReportV2}
+                  disabled={
+                    selectedKeywords.length === 0 ||
+                    !reportTitle.trim() ||
+                    isGenerating ||
+                    !aiStatusData?.ai_available
+                  }
+                  className="btn w-full flex items-center justify-center space-x-2"
+                  style={{
+                    background: 'linear-gradient(135deg, #7c3aed 0%, #1e40af 100%)',
+                    color: 'white'
+                  }}
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Génération...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Brain className="w-4 h-4" />
+                      <span>Rapport Stratégique V2 (Thématique)</span>
                     </>
                   )}
                 </button>

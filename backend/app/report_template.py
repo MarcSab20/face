@@ -1,230 +1,136 @@
 """
-Template HTML Professionnel pour Rapports Stratégiques
-Style inspiration Redaction.pdf
+Template HTML Stratégique V2
+Format: Synthèse + Problématiques + Activistes
 """
 
 from datetime import datetime
 
-def generate_strategic_report_html(report_data: dict) -> str:
-    """Générer le HTML du rapport stratégique"""
+def generate_strategic_report_v2_html(report_data: dict) -> str:
+    """Générer le HTML du rapport stratégique V2"""
     
     metadata = report_data.get('metadata', {})
-    positive = report_data.get('tonalite_positive', {})
-    negative = report_data.get('tonalite_negative', {})
-    neutral = report_data.get('tonalite_neutre', {})
-    synthesis = report_data.get('synthese_generale', {})
+    synthesis = report_data.get('synthese_strategique', {})
+    problematiques_data = report_data.get('problematiques_identifiees', {})
+        if isinstance(problematiques_data, dict):
+            problematiques = problematiques_data.get('problematiques', [])
+        elif isinstance(problematiques_data, list):
+            problematiques = problematiques_data
+        else:
+            problematiques = []
     activists = report_data.get('activistes_comptes_sensibles', {})
+    stats = report_data.get('statistiques', {})
     
-    # Déterminer la couleur du niveau de risque
-    risk_level = negative.get('risk_level', 'FAIBLE')
+    # Couleur du niveau de risque
+    risk_level = synthesis.get('niveau_risque', 'FAIBLE')
     risk_colors = {
-        'ÉLEVÉ': '#ef4444',
+        'CRITIQUE': '#dc2626',
+        'ÉLEVÉ': '#ea580c',
         'MODÉRÉ': '#f59e0b',
         'FAIBLE': '#10b981'
     }
     risk_color = risk_colors.get(risk_level, '#6b7280')
     
-    # Construction des sections HTML complexes AVANT le f-string principal
-    
-    # Section Messages Clés Positifs
-    positive_messages_html = ""
-    if positive.get('key_messages'):
-        messages_items = "".join([f"<li>{msg}</li>" for msg in positive.get('key_messages', [])])
-        positive_messages_html = f"""
-        <h3>Messages Clés Positifs</h3>
-        <ul>
-            {messages_items}
-        </ul>
-        """
-    
-    # Section Top Contenus Positifs
-    positive_contents_html = ""
-    if positive.get('top_contents'):
-        contents_items = "".join([
-            f"""<div class="content-item">
-                <div class="content-title">{content.get('title', 'Sans titre')}</div>
-                <div class="content-meta">
-                    <span class="badge badge-low">{content.get('source', 'N/A')}</span>
-                    Par {content.get('author', 'Inconnu')} • 
-                    Engagement: {content.get('engagement_score', 0):,.0f}
+    # Construire les sections des problématiques
+    problematiques_html = ""
+    if problematiques:
+        for idx, prob in enumerate(problematiques, 1):
+            importance_badge = f"""
+            <span class="badge badge-{
+                'critical' if prob.get('importance') == 'critique' else
+                'high' if prob.get('importance') == 'élevé' else 'medium'
+            }">
+                {prob.get('importance', 'N/A').upper()}
+            </span>
+            """
+            
+            elements_cles_html = ""
+            if prob.get('elements_cles'):
+                elements_items = "".join([
+                    f'<li class="quote-item">"{elem}"</li>' 
+                    for elem in prob.get('elements_cles', [])[:5]
+                ])
+                elements_cles_html = f"""
+                <div class="elements-cles">
+                    <strong>Éléments clés:</strong>
+                    <ul class="quote-list">
+                        {elements_items}
+                    </ul>
                 </div>
-            </div>"""
-            for content in positive.get('top_contents', [])[:5]
-        ])
-        positive_contents_html = f"""
-        <h3>Top Contenus Positifs</h3>
-        {contents_items}
-        """
-    
-    # Section Recommandations Positives
-    positive_recommendations_html = "".join([f"<li>{rec}</li>" for rec in positive.get('recommendations', [])])
-    
-    # Section Critiques Négatives
-    negative_criticisms_html = ""
-    if negative.get('key_criticisms'):
-        criticisms_items = "".join([f"<li>{crit}</li>" for crit in negative.get('key_criticisms', [])])
-        negative_criticisms_html = f"""
-        <h3>Principales Critiques Identifiées</h3>
-        <ul>
-            {criticisms_items}
-        </ul>
-        """
-    
-    # Section Top Contenus Négatifs
-    negative_contents_html = ""
-    if negative.get('top_contents'):
-        neg_contents_items = "".join([
-            f"""<div class="content-item" style="border-left: 3px solid #ef4444;">
-                <div class="content-title">{content.get('title', 'Sans titre')}</div>
-                <div class="content-meta">
-                    <span class="badge badge-critical">{content.get('strategic_impact', 'N/A').upper()}</span>
-                    <span class="badge badge-high">{content.get('source', 'N/A')}</span>
-                    Par {content.get('author', 'Inconnu')} • 
-                    Engagement: {content.get('engagement_score', 0):,.0f}
+                """
+            
+            sources_html = ""
+            if prob.get('sources'):
+                sources_html = f"""
+                <div class="sources-info">
+                    <strong>Sources:</strong> {', '.join(prob.get('sources', [])[:5])} 
+                    ({prob.get('nombre_mentions', 0)} mentions)
                 </div>
-            </div>"""
-            for content in negative.get('top_contents', [])[:5]
-        ])
-        negative_contents_html = f"""
-        <h3>Top Contenus Critiques (Surveillance Prioritaire)</h3>
-        {neg_contents_items}
-        """
-    
-    # Section Recommandations Négatives
-    negative_recommendations_html = "".join([
-        f"""<div class="recommendation">
-            <div class="recommendation-priority">ACTION REQUISE</div>
-            {rec}
-        </div>"""
-        for rec in negative.get('recommendations', [])
-    ])
-    
-    # Section Opportunités Neutres
-    neutral_opportunities_html = ""
-    if neutral.get('opportunities'):
-        opportunities_items = "".join([f"<li>{opp}</li>" for opp in neutral.get('opportunities', [])])
-        neutral_opportunities_html = f"""
-        <h3>Opportunités de Positionnement</h3>
-        <ul>
-            {opportunities_items}
-        </ul>
-        """
-    
-    # Section Contenus Neutres
-    neutral_contents_html = ""
-    if neutral.get('top_contents'):
-        neutral_contents_items = "".join([
-            f"""<div class="content-item">
-                <div class="content-title">{content.get('title', 'Sans titre')}</div>
-                <div class="content-meta">
-                    <span class="badge badge-medium">{content.get('source', 'N/A')}</span>
-                    Par {content.get('author', 'Inconnu')} • 
-                    Engagement: {content.get('engagement_score', 0):,.0f}
+                """
+            
+            problematiques_html += f"""
+            <div class="problematique-card">
+                <div class="problematique-header">
+                    <h3 class="problematique-title">
+                        {idx}. {prob.get('titre', 'Sans titre')}
+                    </h3>
+                    {importance_badge}
                 </div>
-            </div>"""
-            for content in neutral.get('top_contents', [])[:3]
-        ])
-        neutral_contents_html = f"""
-        <h3>Principaux Contenus Neutres</h3>
-        {neutral_contents_items}
-        """
-    
-    # Section Activistes Prioritaires
-    priority_activists_html = '<p>Aucun activiste prioritaire identifié.</p>'
-    if activists.get('priority_activists'):
-        activists_items = "".join([
-            f"""<div class="activist-item">
-                <div class="activist-name">🔴 {activist.get('author', 'Inconnu')}</div>
-                <div class="activist-stats">
-                    <span class="badge badge-critical">{activist.get('alert_level', 'N/A')}</span>
-                    {activist.get('total_contents', 0)} contenu(s) • 
-                    Engagement total: {activist.get('total_engagement', 0):,.0f} • 
-                    Négatif: {activist.get('negative_ratio', 0)}%
+                
+                <div class="problematique-description">
+                    {prob.get('description', 'Pas de description disponible.')}
                 </div>
-            </div>"""
-            for activist in activists.get('priority_activists', [])[:10]
-        ])
-        priority_activists_html = f"""
-        <h3>⚠️ Activistes Prioritaires (Surveillance Critique)</h3>
-        {activists_items}
+                
+                {elements_cles_html}
+                
+                {sources_html}
+            </div>
+            """
+    else:
+        problematiques_html = """
+        <div class="alert alert-info">
+            Aucune problématique majeure identifiée durant cette période.
+        </div>
         """
     
-    # Section Activistes Connus
-    known_activists_html = '<p>Aucun activiste connu détecté durant cette période.</p>'
-    if activists.get('known_activists'):
-        known_rows = "".join([
-            f"""<tr>
-                <td><strong>{activist.get('author', 'Inconnu')}</strong></td>
-                <td>{activist.get('total_contents', 0)}</td>
-                <td>{activist.get('total_engagement', 0):,.0f}</td>
+    # Construire le tableau des activistes
+    activists_table_html = ""
+    if activists.get('liste'):
+        rows_html = "".join([
+            f"""<tr class="{'known-activist' if a.get('is_known') else ''}">
                 <td>
-                    {f"{sum(1 for t in activist.get('tones', []) if t in ['negative', 'very_negative'])}/{len(activist.get('tones', []))} négatifs" if activist.get('tones') else 'N/A'}
+                    <strong>{a.get('nom', 'Inconnu')}</strong>
+                    {'<span class="badge badge-warning">Connu</span>' if a.get('is_known') else ''}
                 </td>
+                <td class="text-center">{a.get('contenus', 0)}</td>
+                <td class="text-right">{a.get('engagement_total', 0):,}</td>
+                <td class="text-center"><small>{a.get('sources', 'N/A')}</small></td>
             </tr>"""
-            for activist in activists.get('known_activists', [])[:20]
+            for a in activists.get('liste', [])[:30]
         ])
-        known_activists_html = f"""
-        <h3>Activistes Connus Détectés</h3>
-        <table>
+        
+        activists_table_html = f"""
+        <table class="activists-table">
             <thead>
                 <tr>
                     <th>Nom</th>
-                    <th>Contenus</th>
-                    <th>Engagement</th>
-                    <th>Tonalité</th>
+                    <th class="text-center">Contenus</th>
+                    <th class="text-right">Engagement Total</th>
+                    <th class="text-center">Sources</th>
                 </tr>
             </thead>
             <tbody>
-                {known_rows}
+                {rows_html}
             </tbody>
         </table>
         """
-    
-    # Section Comptes Suspects
-    suspicious_accounts_html = '<p>Aucun compte suspect identifié.</p>'
-    if activists.get('suspicious_accounts'):
-        suspect_rows = "".join([
-            f"""<tr>
-                <td><strong>{suspect.get('author', 'Inconnu')}</strong></td>
-                <td>{suspect.get('total_contents', 0)}</td>
-                <td>{suspect.get('total_engagement', 0):,.0f}</td>
-                <td>
-                    {f"{sum(1 for t in suspect.get('tones', []) if t in ['negative', 'very_negative'])}/{len(suspect.get('tones', []))} négatifs" if suspect.get('tones') else 'N/A'}
-                </td>
-            </tr>"""
-            for suspect in activists.get('suspicious_accounts', [])[:10]
-        ])
-        suspicious_accounts_html = f"""
-        <h3>Comptes Suspects Identifiés (Non Répertoriés)</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Compte</th>
-                    <th>Contenus</th>
-                    <th>Engagement</th>
-                    <th>Tonalité</th>
-                </tr>
-            </thead>
-            <tbody>
-                {suspect_rows}
-            </tbody>
-        </table>
+    else:
+        activists_table_html = """
+        <div class="alert alert-info">
+            Aucun compte influent détecté durant cette période.
+        </div>
         """
     
-    # Section Recommandations Prioritaires
-    priority_recommendations_html = "".join([
-        f"""<div class="recommendation">
-            <div class="recommendation-priority">{rec.get('priority', 'N/A')}</div>
-            <strong>{rec.get('action', 'N/A')}</strong><br>
-            <span style="font-size: 9pt; color: #6b7280;">Timeline: {rec.get('timeline', 'N/A')}</span>
-        </div>"""
-        for rec in synthesis.get('priority_recommendations', [])
-    ])
-    
-    # Section Points Stratégiques
-    strategic_points_html = "".join([f"<li>{point}</li>" for point in synthesis.get('strategic_points', [])])
-    
-    # MAINTENANT on construit le HTML principal
+    # HTML principal
     html = f"""
 <!DOCTYPE html>
 <html lang="fr">
@@ -238,167 +144,192 @@ def generate_strategic_report_html(report_data: dict) -> str:
             margin: 2cm;
         }}
         
-        body {{
-            font-family: 'Segoe UI', 'Arial', sans-serif;
-            line-height: 1.6;
-            color: #1f2937;
-            font-size: 11pt;
+        * {{
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+        }}
+        
+        body {{
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.5;
+            color: #1f2937;
+            font-size: 10.5pt;
         }}
         
         .header {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1e40af 0%, #7c3aed 100%);
             color: white;
-            padding: 30px;
-            margin: -2cm -2cm 2cm -2cm;
-            text-align: center;
+            padding: 25px 30px;
+            margin: -2cm -2cm 1.5cm -2cm;
         }}
         
         .header h1 {{
-            margin: 0 0 10px 0;
-            font-size: 28pt;
+            font-size: 24pt;
             font-weight: bold;
+            margin-bottom: 8px;
         }}
         
         .header .subtitle {{
-            font-size: 12pt;
-            opacity: 0.9;
+            font-size: 11pt;
+            opacity: 0.95;
         }}
         
-        .metadata {{
-            background: #f3f4f6;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 25px;
-            border-left: 4px solid #667eea;
-        }}
-        
-        .metadata-grid {{
+        .metadata-box {{
+            background: #f8fafc;
+            border-left: 4px solid #3b82f6;
+            padding: 12px 15px;
+            margin-bottom: 20px;
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: repeat(2, 1fr);
             gap: 10px;
+            font-size: 9.5pt;
         }}
         
         .metadata-item {{
-            font-size: 10pt;
+            display: flex;
+            flex-direction: column;
         }}
         
         .metadata-label {{
-            font-weight: bold;
-            color: #4b5563;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 2px;
         }}
         
         h2 {{
-            color: #1f2937;
-            font-size: 18pt;
+            color: #1e293b;
+            font-size: 16pt;
             font-weight: bold;
-            margin: 30px 0 15px 0;
-            padding-bottom: 8px;
-            border-bottom: 3px solid #667eea;
+            margin: 25px 0 12px 0;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #3b82f6;
             page-break-after: avoid;
         }}
         
         h3 {{
-            color: #374151;
-            font-size: 14pt;
+            color: #334155;
+            font-size: 12pt;
             font-weight: 600;
-            margin: 20px 0 10px 0;
+            margin: 15px 0 8px 0;
             page-break-after: avoid;
         }}
         
         .section {{
-            margin-bottom: 35px;
+            margin-bottom: 25px;
             page-break-inside: avoid;
         }}
         
         .synthesis-box {{
-            background: #f0fdf4;
-            border-left: 5px solid #10b981;
-            padding: 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-        }}
-        
-        .warning-box {{
             background: #fef3c7;
             border-left: 5px solid #f59e0b;
-            padding: 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-        }}
-        
-        .danger-box {{
-            background: #fee2e2;
-            border-left: 5px solid #ef4444;
-            padding: 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-        }}
-        
-        .info-box {{
-            background: #e0e7ff;
-            border-left: 5px solid #6366f1;
-            padding: 20px;
-            margin: 20px 0;
-            border-radius: 5px;
-        }}
-        
-        .stats-grid {{
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 15px;
-            margin: 20px 0;
-        }}
-        
-        .stat-box {{
-            background: white;
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
             padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }}
+        
+        .risk-badge {{
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 10pt;
+            color: white;
+            background: {risk_color};
+        }}
+        
+        .metrics-grid {{
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }}
+        
+        .metric-box {{
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 12px;
             text-align: center;
         }}
         
-        .stat-value {{
-            font-size: 24pt;
+        .metric-value {{
+            font-size: 18pt;
             font-weight: bold;
-            color: #667eea;
-            margin-bottom: 5px;
+            color: #3b82f6;
         }}
         
-        .stat-label {{
-            font-size: 9pt;
-            color: #6b7280;
+        .metric-label {{
+            font-size: 8pt;
+            color: #64748b;
             text-transform: uppercase;
+            margin-top: 3px;
         }}
         
-        .content-item {{
-            background: #f9fafb;
-            border: 1px solid #e5e7eb;
-            border-radius: 6px;
+        .problematique-card {{
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
             padding: 15px;
-            margin: 10px 0;
+            margin: 12px 0;
+            page-break-inside: avoid;
         }}
         
-        .content-title {{
+        .problematique-header {{
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }}
+        
+        .problematique-title {{
+            font-size: 11.5pt;
             font-weight: 600;
-            color: #1f2937;
-            margin-bottom: 8px;
+            color: #1e293b;
+            margin: 0;
+            flex: 1;
         }}
         
-        .content-meta {{
+        .problematique-description {{
+            color: #475569;
+            margin: 10px 0;
+            line-height: 1.6;
+        }}
+        
+        .elements-cles {{
+            background: #f1f5f9;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-size: 9.5pt;
+        }}
+        
+        .quote-list {{
+            list-style: none;
+            padding: 8px 0 0 0;
+        }}
+        
+        .quote-item {{
+            padding: 6px 0;
+            border-left: 3px solid #cbd5e1;
+            padding-left: 10px;
+            margin: 5px 0;
+            font-style: italic;
+            color: #334155;
+        }}
+        
+        .sources-info {{
             font-size: 9pt;
-            color: #6b7280;
-            margin-bottom: 8px;
+            color: #64748b;
+            margin-top: 8px;
         }}
         
         .badge {{
             display: inline-block;
             padding: 3px 8px;
-            border-radius: 12px;
+            border-radius: 3px;
             font-size: 8pt;
             font-weight: 600;
-            margin-right: 5px;
         }}
         
         .badge-critical {{
@@ -407,86 +338,80 @@ def generate_strategic_report_html(report_data: dict) -> str:
         }}
         
         .badge-high {{
+            background: #fed7aa;
+            color: #9a3412;
+        }}
+        
+        .badge-medium {{
             background: #fef3c7;
             color: #92400e;
         }}
         
-        .badge-medium {{
-            background: #dbeafe;
-            color: #1e40af;
-        }}
-        
-        .badge-low {{
-            background: #d1fae5;
-            color: #065f46;
-        }}
-        
-        .recommendation {{
-            background: #fffbeb;
-            border-left: 4px solid #f59e0b;
-            padding: 15px;
-            margin: 10px 0;
-            border-radius: 4px;
-        }}
-        
-        .recommendation-priority {{
-            font-weight: bold;
+        .badge-warning {{
+            background: #fef3c7;
             color: #92400e;
-            text-transform: uppercase;
-            font-size: 9pt;
-            margin-bottom: 5px;
         }}
         
-        .activist-item {{
-            background: #fef2f2;
-            border: 1px solid #fecaca;
-            border-radius: 6px;
-            padding: 12px;
-            margin: 8px 0;
-        }}
-        
-        .activist-name {{
-            font-weight: bold;
-            color: #991b1b;
-            margin-bottom: 5px;
-        }}
-        
-        .activist-stats {{
-            font-size: 9pt;
-            color: #6b7280;
-        }}
-        
-        table {{
+        .activists-table {{
             width: 100%;
             border-collapse: collapse;
             margin: 15px 0;
-            font-size: 10pt;
+            font-size: 9.5pt;
         }}
         
-        th {{
-            background: #f3f4f6;
-            padding: 10px;
+        .activists-table thead {{
+            background: #f1f5f9;
+        }}
+        
+        .activists-table th {{
+            padding: 10px 8px;
             text-align: left;
             font-weight: 600;
-            border-bottom: 2px solid #d1d5db;
+            border-bottom: 2px solid #cbd5e1;
+            color: #475569;
         }}
         
-        td {{
-            padding: 10px;
-            border-bottom: 1px solid #e5e7eb;
+        .activists-table td {{
+            padding: 10px 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }}
+        
+        .activists-table .known-activist {{
+            background: #fef3c7;
+        }}
+        
+        .text-center {{
+            text-align: center;
+        }}
+        
+        .text-right {{
+            text-align: right;
+        }}
+        
+        .alert {{
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin: 15px 0;
+            font-size: 9.5pt;
+        }}
+        
+        .alert-info {{
+            background: #dbeafe;
+            color: #1e40af;
+            border-left: 4px solid #3b82f6;
         }}
         
         .page-break {{
             page-break-before: always;
         }}
         
-        ul {{
-            margin: 10px 0;
-            padding-left: 25px;
-        }}
-        
-        li {{
-            margin: 5px 0;
+        .footer {{
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            font-size: 8.5pt;
+            color: #64748b;
         }}
     </style>
 </head>
@@ -500,141 +425,90 @@ def generate_strategic_report_html(report_data: dict) -> str:
     </div>
     
     <!-- Métadonnées -->
-    <div class="metadata">
-        <div class="metadata-grid">
-            <div class="metadata-item">
-                <span class="metadata-label">Mots-clés analysés:</span><br>
-                {', '.join(metadata.get('keywords', []))}
-            </div>
-            <div class="metadata-item">
-                <span class="metadata-label">Période:</span><br>
-                {metadata.get('period_days', 0)} jours
-            </div>
-            <div class="metadata-item">
-                <span class="metadata-label">Contenus analysés:</span><br>
-                {metadata.get('total_contents', 0)} publications
-            </div>
-            <div class="metadata-item">
-                <span class="metadata-label">Généré le:</span><br>
-                {datetime.utcnow().strftime('%d/%m/%Y à %H:%M')}
-            </div>
+    <div class="metadata-box">
+        <div class="metadata-item">
+            <span class="metadata-label">Mots-clés analysés</span>
+            <span>{', '.join(metadata.get('keywords', []))}</span>
+        </div>
+        <div class="metadata-item">
+            <span class="metadata-label">Période</span>
+            <span>{metadata.get('period_days', 0)} jours</span>
+        </div>
+        <div class="metadata-item">
+            <span class="metadata-label">Contenus analysés</span>
+            <span>{metadata.get('total_contents', 0)} publications</span>
+        </div>
+        <div class="metadata-item">
+            <span class="metadata-label">Généré le</span>
+            <span>{datetime.utcnow().strftime('%d/%m/%Y à %H:%M')}</span>
         </div>
     </div>
     
-    <!-- ====== SECTION 1: SYNTHÈSE GÉNÉRALE ====== -->
-    <div class="section page-break">
-        <h2>🎯 SYNTHÈSE GÉNÉRALE STRATÉGIQUE</h2>
+    <!-- ===== SECTION 1: SYNTHÈSE STRATÉGIQUE ===== -->
+    <div class="section">
+        <h2>🎯 SYNTHÈSE STRATÉGIQUE</h2>
         
         <div class="synthesis-box">
-            <p><strong>Tonalité globale:</strong> {synthesis.get('overall_tone', 'N/A')} {synthesis.get('emoji', '')}</p>
-            <p><strong>Évaluation stratégique:</strong> Situation {synthesis.get('strategic_assessment', 'N/A')}</p>
-        </div>
-        
-        <div class="stats-grid">
-            <div class="stat-box">
-                <div class="stat-value">{synthesis.get('breakdown', {}).get('positive', 0)}</div>
-                <div class="stat-label">Contenus Positifs</div>
+            <div style="margin-bottom: 12px;">
+                <strong>Niveau de risque:</strong> 
+                <span class="risk-badge">{risk_level}</span>
             </div>
-            <div class="stat-box">
-                <div class="stat-value">{synthesis.get('breakdown', {}).get('neutral', 0)}</div>
-                <div class="stat-label">Contenus Neutres</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-value">{synthesis.get('breakdown', {}).get('negative', 0)}</div>
-                <div class="stat-label">Contenus Négatifs</div>
+            
+            <div style="line-height: 1.7;">
+                {synthesis.get('synthese_text', 'Synthèse non disponible.')}
             </div>
         </div>
         
-        <h3>Analyse de la Situation</h3>
-        <p>{synthesis.get('synthesis_text', 'Synthèse non disponible.')}</p>
-        
-        <h3>Points Stratégiques Clés</h3>
-        <ul>
-            {strategic_points_html}
-        </ul>
-        
-        <h3>Recommandations Prioritaires</h3>
-        {priority_recommendations_html}
-    </div>
-    
-    <!-- ====== SECTION 2: TONALITÉ POSITIVE ====== -->
-    <div class="section page-break">
-        <h2>😊 CONTENUS À TONALITÉ POSITIVE</h2>
-        
-        <div class="info-box">
-            <p><strong>{positive.get('count', 0)} contenu(s) positif(s) identifié(s)</strong></p>
-            <p>{positive.get('synthesis', 'Aucune synthèse disponible.')}</p>
+        <div class="metrics-grid">
+            <div class="metric-box">
+                <div class="metric-value">{synthesis.get('metriques_cles', {}).get('total_contenus', 0)}</div>
+                <div class="metric-label">Contenus</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-value">{synthesis.get('metriques_cles', {}).get('problematiques_identifiees', 0)}</div>
+                <div class="metric-label">Problématiques</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-value">{synthesis.get('metriques_cles', {}).get('activistes_detectes', 0)}</div>
+                <div class="metric-label">Activistes</div>
+            </div>
+            <div class="metric-box">
+                <div class="metric-value">{synthesis.get('metriques_cles', {}).get('periode_jours', 0)}j</div>
+                <div class="metric-label">Période</div>
+            </div>
         </div>
-        
-        {positive_messages_html}
-        
-        {positive_contents_html}
-        
-        <h3>Recommandations d'Exploitation</h3>
-        <ul>
-            {positive_recommendations_html}
-        </ul>
     </div>
     
-    <!-- ====== SECTION 3: TONALITÉ NÉGATIVE ====== -->
+    <!-- ===== SECTION 2: PROBLÉMATIQUES IDENTIFIÉES ===== -->
     <div class="section page-break">
-        <h2>😟 CONTENUS À TONALITÉ NÉGATIVE</h2>
+        <h2>🔍 PROBLÉMATIQUES IDENTIFIÉES</h2>
         
-        <div class="danger-box">
-            <p><strong>{negative.get('count', 0)} contenu(s) négatif(s) identifié(s)</strong></p>
-            <p><strong>Niveau de risque:</strong> <span style="color: {risk_color}; font-weight: bold;">{negative.get('risk_level', 'N/A')}</span></p>
-        </div>
+        <p style="color: #64748b; margin-bottom: 15px; font-size: 9.5pt;">
+            Analyse approfondie des enjeux stratégiques basée sur la lecture du contenu réel (articles, commentaires, vidéos).
+        </p>
         
-        <h3>Analyse des Contenus Critiques</h3>
-        <p>{negative.get('synthesis', 'Aucune synthèse disponible.')}</p>
-        
-        {negative_criticisms_html}
-        
-        {negative_contents_html}
-        
-        <h3>Recommandations de Contre-Information</h3>
-        {negative_recommendations_html}
+        {problematiques_html}
     </div>
     
-    <!-- ====== SECTION 4: TONALITÉ NEUTRE ====== -->
-    <div class="section page-break">
-        <h2>😐 CONTENUS À TONALITÉ NEUTRE</h2>
-        
-        <div class="info-box">
-            <p><strong>{neutral.get('count', 0)} contenu(s) neutre(s) identifié(s)</strong></p>
-            <p>{neutral.get('synthesis', 'Aucune synthèse disponible.')}</p>
-        </div>
-        
-        {neutral_opportunities_html}
-        
-        {neutral_contents_html}
-    </div>
-    
-    <!-- ====== SECTION 5: ACTIVISTES ET COMPTES SENSIBLES ====== -->
+    <!-- ===== SECTION 3: ACTIVISTES ET COMPTES SENSIBLES ===== -->
     <div class="section page-break">
         <h2>🚨 ACTIVISTES ET COMPTES SENSIBLES</h2>
         
-        <div class="warning-box">
-            <p><strong>Synthèse:</strong> {activists.get('synthesis', 'Aucune détection.')}</p>
-            <p>
-                <strong>{activists.get('total_known', 0)}</strong> activiste(s) connu(s) détecté(s) • 
-                <strong>{activists.get('total_suspicious', 0)}</strong> compte(s) suspect(s) identifié(s)
-            </p>
+        <div style="margin-bottom: 15px; font-size: 9.5pt;">
+            <strong>{activists.get('total_detectes', 0)}</strong> compte(s) influent(s) détecté(s), 
+            dont <strong>{activists.get('activistes_connus', 0)}</strong> activiste(s) connu(s) 
+            et <strong>{activists.get('comptes_suspects', 0)}</strong> compte(s) suspect(s).
         </div>
         
-        {priority_activists_html}
-        
-        {known_activists_html}
-        
-        {suspicious_accounts_html}
+        {activists_table_html}
     </div>
     
     <!-- Footer -->
-    <div style="margin-top: 40px; padding-top: 20px; border-top: 2px solid #e5e7eb; text-align: center; font-size: 9pt; color: #6b7280;">
+    <div class="footer">
         <p>
             <strong>Rapport Stratégique Confidentiel</strong><br>
-            Division Communication et Contre-Information<br>
-            Généré automatiquement avec Intelligence Artificielle Souveraine
+            Analyse IA Souveraine • Division Communication et Contre-Information<br>
+            Généré automatiquement avec Intelligence Artificielle locale
         </p>
     </div>
 </body>
