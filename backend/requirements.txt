@@ -6,13 +6,14 @@ python-multipart==0.0.6
 # Base de données
 sqlalchemy==2.0.25
 psycopg2-binary==2.9.9
+psycopg[binary]>=3.1.0
 alembic==1.13.1
 
 # Redis pour cache
 redis==5.0.1
 
 # Configuration
-pydantic==2.5.3
+pydantic>=2.7.0
 pydantic-settings==2.1.0
 python-dotenv==1.0.0
 
@@ -25,12 +26,12 @@ python-dateutil==2.8.2
 # HTML parsing et web scraping pour IA
 lxml==5.1.0
 html5lib==1.1
-aiohttp==3.9.3
+aiohttp>=3.10
 aiofiles==23.2.0
 
 # ===== INTELLIGENCE ARTIFICIELLE =====
 # Ollama pour modèles LLM locaux
-ollama>=0.1.7
+ollama >=0.1.8
 
 # HuggingFace Transformers (fallback)
 transformers>=4.36.0
@@ -56,7 +57,7 @@ selectolax>=0.3.17
 trafilatura>=1.6.4
 
 # Requests asynchrones
-aiohttp==3.9.3
+aiohttp>=3.10
 httpx==0.26.0
 
 # Gestion des sessions et cookies
@@ -76,10 +77,9 @@ regex>=2023.10.3
 
 # Détection de langue
 langdetect>=1.0.9
-polyglot>=16.7.4
 
 # ===== UTILITAIRES =====
-pytz==2023.3
+pytz>=2024.2
 python-json-logger==2.0.7
 
 # Gestion des erreurs et retry

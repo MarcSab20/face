@@ -1,18 +1,15 @@
 """
-Générateur de Rapports Stratégiques V2
-Focus: Analyse thématique approfondie avec lecture réelle du contenu
+Générateur de Rapports Stratégiques V3 - Style Narratif pour Ministre
+Analyse stratégique rédigée avec argumentaire structuré
 """
 
 import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 from collections import Counter, defaultdict
-import json
 import asyncio
-import statistics
-import re
 
 from app.ai_service import SovereignLLMService, WebContentExtractor
 from app.models import Keyword, Mention
@@ -20,25 +17,12 @@ from app.models import Keyword, Mention
 logger = logging.getLogger(__name__)
 
 
-class StrategicReportGeneratorV2:
-    """Générateur de rapports stratégiques v2 - Analyse thématique approfondie"""
+class StrategicReportGeneratorV3:
+    """Générateur V3 - Rapport narratif pour décideurs"""
     
-    # Liste des activistes connus
     KNOWN_ACTIVISTS = [
-        "N'zui Manto", "Brigade anti-sardinards", "Boris Bertolt", "Angie Forbin",
-        "Abdoulaye Thiam", "Ahmed Abba", "Cameroon News Agency", "Brice Nitcheu",
-        "MbangaMan237", "Sandy Boston Officiel 3", "Mbong Mendzui officiel",
-        "Patrice Nouma", "Richard Bona", "Paul Chouta", "Mimi Mefo",
-        "Général Valsero", "Jaques Bertrand mang", "Michelle ngatchou",
-        "AfroBrains Cameroon-ABC", "Infolage", "Mc-Kenzo-officiel",
-        "Lepierro Lemonstre", "James Bardock Bardock", "Fernandtech TV",
-        "Maurice Kamto", "Kah Walla", "Brenda Biya", "Calibri Calibro",
-        "Patrice Nganang", "Wilfried Ekanga", "Abdouraman Hamadou",
-        "Ernest Obama", "Christian Penda Ekoka", "Fabrice Lena",
-        "Michel Biem Tong", "Armand Okol", "Claude Wilfried Ekanga",
-        "Paul Éric Kingué", "Célestin Djamen", "C'est le hoohaaa",
-        "Les Zanalyses de Arthur", "Cameroon Liberation Streams", 
-        "Africa Daily Report"
+        "Général Valsero", "Michel Biem Tong", "Maurice Kamto", 
+        "Brenda Biya", "Patrice Nganang", "Brigade anti-sardinards"
     ]
     
     def __init__(self, db: Session):
@@ -46,83 +30,400 @@ class StrategicReportGeneratorV2:
         self.llm_service = SovereignLLMService()
         self.web_extractor = WebContentExtractor()
     
-    async def generate_strategic_report(
+    async def generate_ministerial_report(
         self,
         keyword_ids: List[int],
-        days: int = 14,
+        days: int = 30,
         report_title: str = "Rapport Stratégique"
     ) -> Dict:
         """
-        Générer un rapport stratégique avec analyse thématique approfondie
+        Générer un rapport narratif pour ministre/DG
         """
-        logger.info(f"🎯 Génération rapport stratégique V2: {len(keyword_ids)} mots-clés, {days} jours")
+        logger.info(f"📝 Génération rapport ministériel V3: {len(keyword_ids)} mots-clés")
         
-        # 1. Collecter les mentions
+        # 1. Collecter les données
         since_date = datetime.utcnow() - timedelta(days=days)
         mentions = self.db.query(Mention).filter(
             Mention.keyword_id.in_(keyword_ids),
             Mention.published_at >= since_date
-        ).order_by(desc(Mention.published_at)).all()
+        ).order_by(desc(Mention.engagement_score)).all()
         
         if not mentions:
             return self._generate_empty_report(keyword_ids, days, report_title)
         
-        logger.info(f"📊 {len(mentions)} mentions à analyser")
+        # 2. Lecture web approfondie
+        logger.info("🌐 Lecture contenu web + commentaires...")
+        web_contents = await self._deep_read_web_content(mentions[:15])
         
-        # 2. Lecture approfondie du contenu web
-        logger.info("🌐 Lecture approfondie du contenu web...")
-        web_contents = await self._deep_read_web_content(mentions[:20])  # Top 20 pour perf
-        
-        # 3. Analyse thématique avec IA
-        logger.info("🤖 Analyse thématique avec IA...")
-        thematic_analysis = await self._analyze_themes_with_ai(mentions, web_contents)
-        
-        # 4. Identifier les activistes
-        logger.info("🚨 Identification des activistes...")
-        activists_data = self._identify_activists_simple(mentions)
-        
-        # 5. Synthèse stratégique générale
-        logger.info("📝 Génération synthèse stratégique...")
-        strategic_synthesis = await self._generate_strategic_synthesis(
-            mentions, thematic_analysis, activists_data, keyword_ids, days
+        # 3. Analyse stratégique narrative
+        logger.info("🎯 Analyse stratégique en cours...")
+        strategic_analysis = await self._generate_strategic_narrative(
+            mentions, web_contents, keyword_ids, days
         )
         
-        # 6. Compiler le rapport final
+        # 4. Synthèse des commentaires par thème
+        logger.info("💬 Synthèse commentaires par thème...")
+        comments_synthesis = await self._synthesize_comments_by_theme(web_contents)
+        
+        # 5. Identification activistes critiques seulement
+        logger.info("🚨 Identification activistes critiques...")
+        critical_activists = self._identify_critical_activists_only(mentions)
+        
+        # 6. Recommandations opérationnelles
+        logger.info("📋 Génération recommandations...")
+        recommendations = await self._generate_operational_recommendations(
+            strategic_analysis, critical_activists, comments_synthesis
+        )
+        
+        # Compiler le rapport final
         report_data = {
             'metadata': {
                 'title': report_title,
                 'keywords': [self._get_keyword_name(kid) for kid in keyword_ids],
                 'period_days': days,
                 'generated_at': datetime.utcnow(),
-                'total_contents': len(mentions),
-                'web_sources_analyzed': len(web_contents)
+                'classification': 'CONFIDENTIEL - DIFFUSION RESTREINTE'
             },
-            'synthese_strategique': strategic_synthesis,
-            'problematiques_identifiees': thematic_analysis.get('problematiques', []),
-            'activistes_comptes_sensibles': activists_data,
-            'statistiques': self._generate_statistics(mentions)
+            'synthese_executive': strategic_analysis.get('synthese_executive'),
+            'analyse_situation': strategic_analysis.get('analyse_situation'),
+            'evaluation_menaces': strategic_analysis.get('evaluation_menaces'),
+            'synthese_commentaires': comments_synthesis,
+            'activistes_critiques': critical_activists,
+            'recommandations': recommendations,
+            'contenus_viraux': self._identify_viral_content(mentions),
+            'metriques': self._generate_metrics(mentions, web_contents)
         }
         
-        logger.info("✅ Rapport stratégique V2 généré avec succès")
+        logger.info("✅ Rapport ministériel V3 généré")
         return report_data
     
-    async def _deep_read_web_content(self, mentions: List[Mention]) -> List[Dict]:
+    async def _generate_strategic_narrative(
+        self,
+        mentions: List[Mention],
+        web_contents: List[Dict],
+        keyword_ids: List[int],
+        days: int
+    ) -> Dict:
         """
-        Lecture approfondie du contenu web (articles + commentaires)
+        Générer une analyse stratégique narrative (style rédactionnel)
         """
-        web_contents = []
         
-        # Extraire les URLs uniques
+        # Préparer le contexte complet
+        full_context = self._prepare_narrative_context(mentions, web_contents)
+        
+        # Extraire keywords
+        keywords_str = ', '.join([self._get_keyword_name(kid) for kid in keyword_ids])
+        
+        # PROMPT CRITIQUE - Force le style narratif
+        prompt = f"""Tu es un analyste stratégique senior rédigeant un rapport CONFIDENTIEL pour le Ministre.
+
+CONTEXTE:
+- Surveillance: {keywords_str}
+- Période: {days} jours  
+- Sources: {len(mentions)} publications + {len(web_contents)} articles analysés en profondeur
+- Niveau: DIFFUSION RESTREINTE
+
+DONNÉES ANALYSÉES:
+{full_context[:12000]}
+
+=== INSTRUCTIONS CRITIQUES ===
+
+Tu dois rédiger une analyse stratégique en TEXTE CONTINU (PAS de listes à puces).
+Style: Rédaction fluide, paragraphes argumentés, comme un brief confidentiel.
+
+STRUCTURE OBLIGATOIRE:
+
+**1. SYNTHÈSE EXÉCUTIVE** (3-4 paragraphes rédigés)
+Commence par: "L'analyse de [X] publications sur [période] révèle..."
+Rédige un texte fluide qui répond à:
+- Quelle est la situation globale ?
+- Les intérêts de l'État sont-ils menacés ?
+- La République est-elle en danger, en paix, ou sous tension ?
+- Niveau de criticité: FAIBLE / MODÉRÉ / ÉLEVÉ / CRITIQUE
+
+**2. ANALYSE DE LA SITUATION** (4-5 paragraphes rédigés)
+Rédige en paragraphes continus qui expliquent:
+- Quels sont les thèmes dominants dans le discours public ?
+- Que pensent réellement les citoyens ? (analyse des commentaires)
+- Y a-t-il des narratifs dangereux qui se propagent ?
+- Quelles sont les revendications exprimées ?
+
+Utilise des phrases comme:
+"Les publications analysées montrent que..."
+"Un examen approfondi des commentaires révèle..."
+"Il ressort de cette analyse que..."
+
+**3. ÉVALUATION DES MENACES** (3-4 paragraphes rédigés)
+Identifie et argumente:
+- Existe-t-il des appels à la violence ou à la contestation ?
+- Y a-t-il une mobilisation organisée ?
+- Quel est le niveau d'engagement populaire ?
+- Les activistes connus sont-ils actifs ?
+
+CONTRAINTES ABSOLUES:
+- ZÉRO liste à puces
+- Texte rédigé en paragraphes fluides
+- Citations entre guillemets si nécessaires
+- Ton professionnel mais accessible
+- Français soutenu
+- Pas de jargon technique
+- Conclusions claires et actionnables
+
+Réponds UNIQUEMENT en JSON structuré:
+{{
+    "synthese_executive": {{
+        "texte": "<3-4 paragraphes rédigés>",
+        "niveau_criticite": "FAIBLE|MODÉRÉ|ÉLEVÉ|CRITIQUE",
+        "menace_etat": "OUI|NON",
+        "paix_publique": "STABLE|FRAGILE|TENDUE|CRITIQUE"
+    }},
+    "analyse_situation": {{
+        "texte": "<4-5 paragraphes rédigés sur les thèmes et l'opinion>",
+        "themes_dominants": ["<thème 1>", "<thème 2>", "<thème 3>"],
+        "sentiment_general": "<positif|mitigé|négatif>"
+    }},
+    "evaluation_menaces": {{
+        "texte": "<3-4 paragraphes rédigés sur les menaces identifiées>",
+        "menaces_identifiees": ["<menace 1>", "<menace 2>"],
+        "niveau_mobilisation": "FAIBLE|MOYEN|ÉLEVÉ"
+    }}
+}}
+"""
+        
+        try:
+            context_data = {
+                'mentions': [self._mention_to_dict(m) for m in mentions[:20]],
+                'web_content': web_contents[:10],
+                'keywords': keywords_str,
+                'period_days': days
+            }
+            
+            response = await self.llm_service.analyze_with_local_llm(prompt, context_data)
+            
+            # Parser la réponse JSON
+            import re
+            import json
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+                return result
+            
+            # Fallback
+            return self._fallback_narrative_analysis(mentions, web_contents)
+            
+        except Exception as e:
+            logger.error(f"Erreur analyse narrative: {e}")
+            return self._fallback_narrative_analysis(mentions, web_contents)
+    
+    async def _synthesize_comments_by_theme(self, web_contents: List[Dict]) -> Dict:
+        """
+        Synthétiser tous les commentaires par thème (en texte rédigé)
+        """
+        
+        all_comments = []
+        for wc in web_contents:
+            comments = wc.get('comments', [])
+            for comment in comments:
+                all_comments.append({
+                    'text': comment.get('text', ''),
+                    'author': comment.get('author', 'Anonyme'),
+                    'likes': comment.get('likes', 0),
+                    'source_url': wc.get('url', '')
+                })
+        
+        if not all_comments:
+            return {
+                'synthese': "Aucun commentaire n'a pu être extrait des sources analysées.",
+                'themes': []
+            }
+        
+        # Préparer le contexte des commentaires
+        comments_text = '\n'.join([
+            f"- {c['text'][:200]}... (👤 {c['author']}, 👍 {c['likes']})"
+            for c in all_comments[:50]  # Top 50 commentaires
+        ])
+        
+        prompt = f"""Tu analyses {len(all_comments)} commentaires d'internautes.
+
+COMMENTAIRES:
+{comments_text}
+
+Rédige une SYNTHÈSE EN TEXTE CONTINU (pas de listes) qui répond à:
+- Que pensent globalement les internautes ?
+- Quels sont les thèmes récurrents dans leurs réactions ?
+- Y a-t-il des commentaires incitant à la violence ou à la contestation ?
+- Quel est le ton général: soutien, critique, neutre ?
+
+Réponds en JSON:
+{{
+    "synthese": "<4-5 paragraphes rédigés analysant l'opinion des commentateurs>",
+    "themes_commentaires": ["<thème 1>", "<thème 2>", "<thème 3>"],
+    "commentaire_plus_engage": "<texte du commentaire ayant le plus de likes>",
+    "appels_action": "OUI|NON"
+}}
+"""
+        
+        try:
+            context_data = {'comments': all_comments[:30]}
+            response = await self.llm_service.analyze_with_local_llm(prompt, context_data)
+            
+            import re, json
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+            
+            return self._fallback_comments_synthesis(all_comments)
+            
+        except Exception as e:
+            logger.error(f"Erreur synthèse commentaires: {e}")
+            return self._fallback_comments_synthesis(all_comments)
+    
+    def _identify_critical_activists_only(self, mentions: List[Mention]) -> Dict:
+        """
+        Identifier SEULEMENT les activistes critiques (connus + 4-5 nouveaux max)
+        """
+        activists_data = defaultdict(lambda: {
+            'contents': 0,
+            'engagement': 0,
+            'is_known': False,
+            'peak_engagement': 0
+        })
+        
+        for mention in mentions:
+            author = mention.author
+            engagement = mention.engagement_score
+            
+            # Vérifier si activiste connu
+            is_known = any(
+                activist.lower() in author.lower() 
+                for activist in self.KNOWN_ACTIVISTS
+            )
+            
+            # Ne garder que si connu OU très engageant
+            if is_known or engagement > 5000:
+                activists_data[author]['contents'] += 1
+                activists_data[author]['engagement'] += engagement
+                activists_data[author]['is_known'] = is_known
+                if engagement > activists_data[author]['peak_engagement']:
+                    activists_data[author]['peak_engagement'] = engagement
+        
+        # Filtrer: tous les connus + top 5 nouveaux
+        known_activists = [
+            {'nom': author, **data}
+            for author, data in activists_data.items()
+            if data['is_known']
+        ]
+        
+        new_activists = [
+            {'nom': author, **data}
+            for author, data in activists_data.items()
+            if not data['is_known']
+        ]
+        new_activists.sort(key=lambda x: x['engagement'], reverse=True)
+        new_activists = new_activists[:5]  # Max 5 nouveaux
+        
+        critical_list = known_activists + new_activists
+        critical_list.sort(key=lambda x: x['engagement'], reverse=True)
+        
+        return {
+            'total': len(critical_list),
+            'connus': len(known_activists),
+            'nouveaux': len(new_activists),
+            'liste': critical_list
+        }
+    
+    def _identify_viral_content(self, mentions: List[Mention]) -> Dict:
+        """
+        Identifier le contenu le plus viral/partagé
+        """
+        top_viral = sorted(mentions, key=lambda m: m.engagement_score, reverse=True)[:5]
+        
+        return {
+            'plus_engage': {
+                'titre': top_viral[0].title if top_viral else 'N/A',
+                'auteur': top_viral[0].author if top_viral else 'N/A',
+                'engagement': int(top_viral[0].engagement_score) if top_viral else 0,
+                'source': top_viral[0].source if top_viral else 'N/A',
+                'url': top_viral[0].source_url if top_viral else ''
+            },
+            'top_5': [
+                {
+                    'titre': m.title,
+                    'engagement': int(m.engagement_score),
+                    'source': m.source
+                }
+                for m in top_viral
+            ]
+        }
+    
+    async def _generate_operational_recommendations(
+        self,
+        strategic_analysis: Dict,
+        critical_activists: Dict,
+        comments_synthesis: Dict
+    ) -> Dict:
+        """
+        Générer des recommandations opérationnelles en texte rédigé
+        """
+        
+        criticite = strategic_analysis.get('synthese_executive', {}).get('niveau_criticite', 'MODÉRÉ')
+        menace_etat = strategic_analysis.get('synthese_executive', {}).get('menace_etat', 'NON')
+        
+        prompt = f"""Tu es conseiller stratégique. Rédige des recommandations opérationnelles.
+
+SITUATION:
+- Criticité: {criticite}
+- Menace État: {menace_etat}
+- Activistes critiques: {critical_activists['total']} ({critical_activists['connus']} connus)
+- Appels à l'action: {comments_synthesis.get('appels_action', 'NON')}
+
+Rédige en TEXTE CONTINU (pas de liste) des recommandations organisées en:
+
+1. ACTIONS IMMÉDIATES (0-24h)
+2. ACTIONS COURT TERME (1-7 jours)
+3. ACTIONS MOYEN TERME (1 mois)
+
+Style: Impératif, clair, actionnable.
+
+Réponds en JSON:
+{{
+    "actions_immediates": "<paragraphe rédigé avec 2-3 actions urgentes>",
+    "actions_court_terme": "<paragraphe rédigé avec 3-4 actions à 7 jours>",
+    "actions_moyen_terme": "<paragraphe rédigé avec 2-3 actions stratégiques>"
+}}
+"""
+        
+        try:
+            response = await self.llm_service.analyze_with_local_llm(prompt, {
+                'criticite': criticite,
+                'menace': menace_etat
+            })
+            
+            import re, json
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+            
+            return self._fallback_recommendations(criticite)
+            
+        except Exception as e:
+            logger.error(f"Erreur recommandations: {e}")
+            return self._fallback_recommendations(criticite)
+    
+    # ... (Méthodes utilitaires: _prepare_narrative_context, _fallback_*, _mention_to_dict, etc.)
+    
+    async def _deep_read_web_content(self, mentions: List[Mention]) -> List[Dict]:
+        """Lecture web approfondie"""
+        web_contents = []
         urls = set()
+        
         for mention in mentions:
             if mention.source_url and mention.source_url.startswith('http'):
                 urls.add(mention.source_url)
         
-        urls_list = list(urls)[:15]  # Limiter à 15 pour la performance
-        logger.info(f"Lecture de {len(urls_list)} sources web...")
+        urls_list = list(urls)[:15]
         
         async with self.web_extractor as extractor:
-            # Traiter les URLs en parallèle
             semaphore = asyncio.Semaphore(3)
             
             async def extract_with_semaphore(url):
@@ -136,389 +437,159 @@ class StrategicReportGeneratorV2:
                 if isinstance(result, dict) and 'content' in result:
                     web_contents.append(result)
         
-        logger.info(f"✅ {len(web_contents)} sources web lues avec succès")
         return web_contents
     
-    async def _analyze_themes_with_ai(
-        self, 
-        mentions: List[Mention], 
-        web_contents: List[Dict]
-    ) -> Dict:
-        """
-        Analyser les thèmes et problématiques avec IA
-        """
-        # Préparer le contexte complet
-        full_context = self._prepare_full_context(mentions, web_contents)
-        
-        # Préparer les mots-clés uniques (CORRECTION ICI)
-        all_keywords = set()
-        for m in mentions[:5]:
-            if m.title:
-                all_keywords.update(m.title.split()[:3])
-        keywords_str = ', '.join(list(all_keywords)[:10]) if all_keywords else 'non disponibles'
-
-        # Prompt pour l'analyse thématique
-        prompt = f"""
-Tu es un analyste stratégique senior. Analyse ces {len(mentions)} contenus collectés sur Internet.
-
-CONTEXTE:
-- {len(mentions)} publications analysées
-- {len(web_contents)} sources web lues en profondeur (articles + commentaires)
-- Mots-clés: {keywords_str}
-
-CONTENU À ANALYSER:
-{full_context[:8000]}
-
-MISSION:
-Identifie les 3-5 PROBLÉMATIQUES MAJEURES qui ressortent de ces contenus.
-
-Pour chaque problématique:
-1. Titre court et factuel (5-8 mots max)
-2. Description concise (2-3 phrases) expliquant l'enjeu
-3. Citations ou éléments clés (ce qui est dit exactement)
-4. Niveau d'importance (critique/élevé/moyen)
-
-CONTRAINTES:
-- Sois FACTUEL, ne spécule pas
-- Base-toi uniquement sur le contenu fourni
-- Identifie les vrais enjeux stratégiques
-- Évite les généralités
-
-Réponds UNIQUEMENT en JSON:
-{{
-    "problematiques": [
-        {{
-            "titre": "<titre court>",
-            "description": "<2-3 phrases factuelles>",
-            "elements_cles": ["<citation 1>", "<citation 2>"],
-            "importance": "critique|élevé|moyen",
-            "nombre_mentions": <nombre>,
-            "sources": ["<source 1>", "<source 2>"]
-        }}
-    ],
-    "synthese_generale": "<vision globale en 3-4 phrases>"
-}}
-"""
-        try:
-            context_data = {
-                'mentions': [self._mention_to_dict(m) for m in mentions[:10]],
-                'web_content': web_contents[:5],
-                'keywords': [],
-                'period_days': 1
-            }
-            
-            response = await self.llm_service.analyze_with_local_llm(prompt, context_data)
-            
-            # Parser la réponse JSON
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group())
-                if 'problematiques' in result:
-                    return result
-            
-            # Fallback si parsing échoue
-            return self._fallback_thematic_analysis(mentions, web_contents)
-            
-        except Exception as e:
-            logger.error(f"Erreur analyse thématique IA: {e}")
-            return self._fallback_thematic_analysis(mentions, web_contents)
-    
-    def _prepare_full_context(self, mentions: List[Mention], web_contents: List[Dict]) -> str:
-        """Préparer le contexte complet pour l'IA"""
-        
+    def _prepare_narrative_context(self, mentions: List[Mention], web_contents: List[Dict]) -> str:
+        """Préparer contexte pour prompt narratif"""
         context_parts = []
         
-        # Ajouter les mentions principales
-        context_parts.append("=== PUBLICATIONS ===")
-        for i, mention in enumerate(mentions[:15], 1):
+        context_parts.append("=== PUBLICATIONS ANALYSÉES ===")
+        for i, mention in enumerate(mentions[:10], 1):
             context_parts.append(f"\n{i}. [{mention.source}] {mention.title}")
-            context_parts.append(f"   Auteur: {mention.author}")
-            context_parts.append(f"   {mention.content[:300]}...")
+            context_parts.append(f"   Auteur: {mention.author} | Engagement: {mention.engagement_score}")
+            context_parts.append(f"   {mention.content[:250]}...")
         
-        # Ajouter le contenu web lu
         if web_contents:
-            context_parts.append("\n\n=== CONTENU WEB APPROFONDI ===")
+            context_parts.append("\n\n=== CONTENU WEB + COMMENTAIRES ===")
             for i, wc in enumerate(web_contents[:5], 1):
                 content = wc.get('content', {})
-                context_parts.append(f"\n{i}. {content.get('title', 'Sans titre')}")
-                context_parts.append(f"   {content.get('text', '')[:400]}...")
+                comments = wc.get('comments', [])
                 
-                # Ajouter quelques commentaires
-                comments = wc.get('comments', [])[:3]
+                context_parts.append(f"\n{i}. {content.get('title', 'Sans titre')}")
+                context_parts.append(f"   Article: {content.get('text', '')[:300]}...")
+                
                 if comments:
-                    context_parts.append("   Commentaires:")
-                    for comment in comments:
-                        context_parts.append(f"   - {comment.get('text', '')[:150]}...")
+                    context_parts.append(f"   Commentaires ({len(comments)}):")
+                    for comment in comments[:3]:
+                        context_parts.append(f"   - {comment.get('text', '')[:120]}...")
         
         return '\n'.join(context_parts)
     
-    def _fallback_thematic_analysis(
-        self, 
-        mentions: List[Mention], 
-        web_contents: List[Dict]
-    ) -> Dict:
-        """Analyse thématique fallback basée sur des règles"""
+    def _fallback_narrative_analysis(self, mentions: List[Mention], web_contents: List[Dict]) -> Dict:
+        """Analyse fallback narrative"""
+        negative_count = sum(1 for m in mentions if m.sentiment == 'negative')
+        negative_ratio = negative_count / len(mentions) if mentions else 0
         
-        # Extraire tous les textes
-        all_texts = []
-        for mention in mentions:
-            all_texts.append(mention.title + " " + mention.content)
-        
-        for wc in web_contents:
-            content = wc.get('content', {})
-            all_texts.append(content.get('title', '') + " " + content.get('text', ''))
-            
-            for comment in wc.get('comments', [])[:10]:
-                all_texts.append(comment.get('text', ''))
-        
-        combined_text = ' '.join(all_texts).lower()
-        
-        # Mots-clés thématiques
-        themes = {
-            'gouvernance': ['gouvernement', 'autorité', 'pouvoir', 'régime', 'état', 'dictature', 'démocratie'],
-            'économie': ['économie', 'argent', 'prix', 'inflation', 'corruption', 'pauvreté', 'salaire'],
-            'sécurité': ['sécurité', 'armée', 'police', 'violence', 'guerre', 'conflit', 'militaire'],
-            'social': ['population', 'peuple', 'citoyens', 'société', 'manifestation', 'protestation'],
-            'élections': ['élection', 'vote', 'candidat', 'scrutin', 'campagne', 'opposition']
-        }
-        
-        # Identifier les thèmes présents
-        problematiques = []
-        for theme_name, keywords in themes.items():
-            count = sum(1 for kw in keywords if kw in combined_text)
-            if count >= 3:
-                # Extraire quelques mentions pertinentes
-                relevant_mentions = [
-                    m for m in mentions 
-                    if any(kw in (m.title + " " + m.content).lower() for kw in keywords)
-                ][:3]
-                
-                problematiques.append({
-                    'titre': f"Problématique: {theme_name.capitalize()}",
-                    'description': f"Plusieurs contenus abordent des questions liées à {theme_name}. "
-                                 f"{len(relevant_mentions)} publications principales identifiées.",
-                    'elements_cles': [m.title for m in relevant_mentions],
-                    'importance': 'élevé' if count > 5 else 'moyen',
-                    'nombre_mentions': len(relevant_mentions),
-                    'sources': list(set(m.source for m in relevant_mentions))
-                })
-        
-        return {
-            'problematiques': problematiques[:5],
-            'synthese_generale': f"Analyse de {len(mentions)} contenus révélant {len(problematiques)} problématiques majeures."
-        }
-    
-    def _identify_activists_simple(self, mentions: List[Mention]) -> Dict:
-        """
-        Identifier les activistes de manière simple (tableau uniquement)
-        """
-        activists_data = defaultdict(lambda: {'contents': 0, 'engagement': 0, 'sources': set()})
-        
-        for mention in mentions:
-            author = mention.author
-            
-            # Vérifier si activiste connu
-            is_known = any(
-                activist.lower() in author.lower() 
-                for activist in self.KNOWN_ACTIVISTS
-            )
-            
-            if is_known or mention.engagement_score > 1000:
-                activists_data[author]['contents'] += 1
-                activists_data[author]['engagement'] += mention.engagement_score
-                activists_data[author]['sources'].add(mention.source)
-                activists_data[author]['is_known'] = is_known
-        
-        # Convertir en liste triée
-        activists_list = []
-        for author, data in activists_data.items():
-            activists_list.append({
-                'nom': author,
-                'is_known': data['is_known'],
-                'contenus': data['contents'],
-                'engagement_total': int(data['engagement']),
-                'sources': ', '.join(sorted(data['sources']))
-            })
-        
-        # Trier par engagement
-        activists_list.sort(key=lambda x: x['engagement_total'], reverse=True)
-        
-        return {
-            'total_detectes': len(activists_list),
-            'activistes_connus': sum(1 for a in activists_list if a['is_known']),
-            'comptes_suspects': sum(1 for a in activists_list if not a['is_known']),
-            'liste': activists_list[:30]  # Top 30
-        }
-    
-    async def _generate_strategic_synthesis(
-        self,
-        mentions: List[Mention],
-        thematic_analysis: Dict,
-        activists_data: Dict,
-        keyword_ids: List[int],
-        days: int
-    ) -> Dict:
-        """
-        Générer la synthèse stratégique générale
-        """
-        # Prompt pour synthèse
-        problematiques_summary = '\n'.join([
-            f"- {p['titre']}: {p['importance']}" 
-            for p in thematic_analysis.get('problematiques', [])[:5]
-        ])
-        
-        prompt = f"""
-Tu es le directeur de la communication qui rédige un brief au DG.
-
-SITUATION:
-- Période: {days} jours
-- Contenus analysés: {len(mentions)}
-- Activistes détectés: {activists_data['total_detectes']}
-- Problématiques identifiées:
-{problematiques_summary}
-
-Rédige une synthèse exécutive de 3 paragraphes maximum:
-1. Vue d'ensemble de la situation
-2. Enjeux stratégiques majeurs
-3. Évaluation du niveau de risque (Faible/Modéré/Élevé/Critique)
-
-Style: Direct, factuel, concis. Phrases courtes.
-"""
-        
-        try:
-            context_data = {
-                'mentions': [self._mention_to_dict(m) for m in mentions[:5]],
-                'keywords': [],
-                'period_days': days
-            }
-            
-            synthesis_text = await self.llm_service.analyze_with_local_llm(prompt, context_data)
-            
-        except Exception as e:
-            logger.warning(f"Erreur synthèse IA: {e}")
-            synthesis_text = self._fallback_synthesis(len(mentions), activists_data, days)
-        
-        # Déterminer le niveau de risque
-        risk_level = self._assess_risk_level(mentions, thematic_analysis, activists_data)
-        
-        return {
-            'synthese_text': synthesis_text.strip(),
-            'niveau_risque': risk_level,
-            'metriques_cles': {
-                'total_contenus': len(mentions),
-                'periode_jours': days,
-                'problematiques_identifiees': len(thematic_analysis.get('problematiques', [])),
-                'activistes_detectes': activists_data['total_detectes']
-            }
-        }
-    
-    def _assess_risk_level(
-        self,
-        mentions: List[Mention],
-        thematic_analysis: Dict,
-        activists_data: Dict
-    ) -> str:
-        """Évaluer le niveau de risque global"""
-        
-        risk_score = 0
-        
-        # Facteur: Problématiques critiques
-        critical_issues = sum(
-            1 for p in thematic_analysis.get('problematiques', []) 
-            if p.get('importance') == 'critique'
-        )
-        risk_score += critical_issues * 3
-        
-        # Facteur: Volume de mentions
-        if len(mentions) > 100:
-            risk_score += 2
-        elif len(mentions) > 50:
-            risk_score += 1
-        
-        # Facteur: Activistes connus
-        if activists_data['activistes_connus'] > 3:
-            risk_score += 2
-        elif activists_data['activistes_connus'] > 0:
-            risk_score += 1
-        
-        # Facteur: Engagement élevé
-        high_engagement = sum(1 for m in mentions if m.engagement_score > 1000)
-        if high_engagement > 10:
-            risk_score += 2
-        elif high_engagement > 5:
-            risk_score += 1
-        
-        # Déterminer le niveau
-        if risk_score >= 7:
-            return 'CRITIQUE'
-        elif risk_score >= 5:
-            return 'ÉLEVÉ'
-        elif risk_score >= 3:
-            return 'MODÉRÉ'
+        if negative_ratio > 0.6:
+            criticite = "ÉLEVÉ"
+            menace = "OUI"
+            paix = "TENDUE"
+        elif negative_ratio > 0.3:
+            criticite = "MODÉRÉ"
+            menace = "NON"
+            paix = "FRAGILE"
         else:
-            return 'FAIBLE'
-    
-    def _fallback_synthesis(self, total_mentions: int, activists_data: Dict, days: int) -> str:
-        """Synthèse fallback"""
-        return f"""Sur les {days} derniers jours, {total_mentions} contenus ont été analysés. 
+            criticite = "FAIBLE"
+            menace = "NON"
+            paix = "STABLE"
         
-{activists_data['total_detectes']} comptes influents détectés dont {activists_data['activistes_connus']} activistes connus.
-
-Surveillance continue recommandée pour anticiper les évolutions."""
-    
-    def _generate_statistics(self, mentions: List[Mention]) -> Dict:
-        """Générer les statistiques du rapport"""
+        synthese_text = f"""L'analyse de {len(mentions)} publications sur {len(set(m.source for m in mentions))} sources révèle une situation {paix.lower()}. """
         
-        total = len(mentions)
+        if negative_ratio > 0.5:
+            synthese_text += f"Le sentiment négatif domine ({negative_ratio:.0%}), reflétant des préoccupations marquées au sein de l'opinion publique. "
+        else:
+            synthese_text += f"Le ton reste globalement modéré, bien que {negative_ratio:.0%} des contenus expriment des critiques. "
         
-        if total == 0:
-            return {}
+        synthese_text += f"Les intérêts de l'État {'sont potentiellement menacés' if menace == 'OUI' else 'ne semblent pas directement menacés'} dans l'immédiat. "
         
-        # Distribution par source
-        sources = Counter([m.source for m in mentions])
-        
-        # Engagement
-        total_engagement = sum(m.engagement_score for m in mentions)
-        avg_engagement = total_engagement / total
-        
-        # Top auteurs
-        authors = Counter([m.author for m in mentions])
+        if len(web_contents) > 0:
+            total_comments = sum(len(wc.get('comments', [])) for wc in web_contents)
+            synthese_text += f"L'examen de {total_comments} commentaires d'internautes permet de mieux cerner les véritables préoccupations citoyennes."
         
         return {
-            'total_contents': total,
-            'sources_distribution': dict(sources.most_common(10)),
+            'synthese_executive': {
+                'texte': synthese_text,
+                'niveau_criticite': criticite,
+                'menace_etat': menace,
+                'paix_publique': paix
+            },
+            'analyse_situation': {
+                'texte': "L'analyse détaillée des thématiques dominantes sera produite avec un modèle IA plus performant (Mistral recommandé).",
+                'themes_dominants': [],
+                'sentiment_general': 'négatif' if negative_ratio > 0.5 else 'mitigé'
+            },
+            'evaluation_menaces': {
+                'texte': "L'évaluation approfondie des menaces nécessite un modèle IA plus puissant pour une analyse sémantique avancée.",
+                'menaces_identifiees': [],
+                'niveau_mobilisation': "MOYEN" if len(mentions) > 50 else "FAIBLE"
+            }
+        }
+    
+    def _fallback_comments_synthesis(self, comments: List[Dict]) -> Dict:
+        """Synthèse commentaires fallback"""
+        if not comments:
+            return {
+                'synthese': "Aucun commentaire disponible pour analyse.",
+                'themes_commentaires': [],
+                'commentaire_plus_engage': '',
+                'appels_action': 'NON'
+            }
+        
+        top_comment = max(comments, key=lambda c: c.get('likes', 0))
+        
+        return {
+            'synthese': f"L'analyse de {len(comments)} commentaires d'internautes révèle un engagement significatif. Le commentaire le plus apprécié a reçu {top_comment['likes']} réactions, indiquant une forte résonance auprès du public.",
+            'themes_commentaires': ['Opinion publique', 'Engagement citoyen'],
+            'commentaire_plus_engage': top_comment['text'][:200],
+            'appels_action': 'À DÉTERMINER'
+        }
+    
+    def _fallback_recommendations(self, criticite: str) -> Dict:
+        """Recommandations fallback"""
+        if criticite in ['CRITIQUE', 'ÉLEVÉ']:
+            immediates = "Activer immédiatement la cellule de veille stratégique. Préparer des éléments de communication officielle pour répondre aux préoccupations identifiées."
+            court_terme = "Engager un dialogue avec les influenceurs clés identifiés dans ce rapport. Mettre en place un monitoring renforcé H24 pour détecter toute escalade."
+            moyen_terme = "Développer une stratégie de communication de long terme pour restaurer la confiance. Analyser les causes profondes des tensions identifiées."
+        else:
+            immediates = "Maintenir la surveillance habituelle. Aucune action d'urgence n'est requise à ce stade."
+            court_terme = "Continuer le monitoring des sources identifiées. Préparer des messages de clarification sur les points sensibles détectés."
+            moyen_terme = "Consolider la stratégie de communication digitale. Renforcer les canaux d'écoute de l'opinion publique."
+        
+        return {
+            'actions_immediates': immediates,
+            'actions_court_terme': court_terme,
+            'actions_moyen_terme': moyen_terme
+        }
+    
+    def _generate_metrics(self, mentions: List[Mention], web_contents: List[Dict]) -> Dict:
+        """Générer métriques"""
+        total_engagement = sum(m.engagement_score for m in mentions)
+        total_comments = sum(len(wc.get('comments', [])) for wc in web_contents)
+        
+        return {
+            'total_publications': len(mentions),
             'total_engagement': int(total_engagement),
-            'average_engagement': round(avg_engagement, 1),
-            'top_auteurs': dict(authors.most_common(10))
+            'engagement_moyen': int(total_engagement / len(mentions)) if mentions else 0,
+            'sources_analysees': len(set(m.source for m in mentions)),
+            'articles_lus': len(web_contents),
+            'commentaires_analyses': total_comments
         }
     
     def _mention_to_dict(self, mention: Mention) -> Dict:
-        """Convertir une mention en dict"""
+        """Convertir mention en dict"""
         return {
-            'id': mention.id,
             'title': mention.title,
             'content': mention.content,
             'author': mention.author,
             'source': mention.source,
-            'source_url': mention.source_url,
             'engagement_score': mention.engagement_score,
-            'published_at': mention.published_at.isoformat() if mention.published_at else None
+            'sentiment': mention.sentiment
         }
     
     def _get_keyword_name(self, keyword_id: int) -> str:
-        """Obtenir le nom d'un mot-clé"""
-        keyword = self.db.query(Keyword).filter(Keyword.id == keyword_id).first()
-        return keyword.keyword if keyword else f"Mot-clé #{keyword_id}"
+        """Obtenir nom mot-clé"""
+        kw = self.db.query(Keyword).filter(Keyword.id == keyword_id).first()
+        return kw.keyword if kw else f"Mot-clé #{keyword_id}"
     
     def _generate_empty_report(self, keyword_ids: List[int], days: int, title: str) -> Dict:
-        """Générer un rapport vide"""
+        """Rapport vide"""
         return {
             'metadata': {
                 'title': title,
                 'keywords': [self._get_keyword_name(kid) for kid in keyword_ids],
                 'period_days': days,
                 'generated_at': datetime.utcnow(),
-                'total_contents': 0
+                'classification': 'CONFIDENTIEL'
             },
             'error': 'Aucune donnée disponible pour cette période'
         }

@@ -68,8 +68,12 @@ class SovereignLLMService:
         try:
             import ollama
             import os
-            ollama_host = os.getenv('OLLAMA_HOST', 'http://172.17.0.1:11434')
+            ollama_host = os.getenv('OLLAMA_HOST', 'http://ollama:11434')
             logger.info(f"Tentative de connexion à Ollama sur: {ollama_host}")
+            
+            # Configuration du client avec l'hôte Docker
+            os.environ['OLLAMA_HOST'] = ollama_host
+        
             # Tester la disponibilité
             models = ollama.list()
             self.ollama_available = True
@@ -268,11 +272,12 @@ class SovereignLLMService:
     def _select_best_model(self) -> str:
         """Sélectionner le meilleur modèle Ollama disponible"""
         preferred_models = [
-            'tinyllama', 'llama2:7b', 'codellama:7b', 
+            'gemma:2b', 'tinyllama', 'llama2:7b', 'codellama:7b', 
             'neural-chat:7b', 'llama2:chat'
         ]
         
         for model in preferred_models:
+            logger.info(f"Modèle sélectionné: {model}")
             if model in self.available_models:
                 return model
         

@@ -268,7 +268,7 @@ import os
 sys.path.append(os.getcwd())
 
 try:
-    from ia_service import SovereignLLMService
+    from app.ia_service import SovereignLLMService
     
     # Initialiser le service
     llm_service = SovereignLLMService()

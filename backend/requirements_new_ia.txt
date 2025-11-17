@@ -20,10 +20,10 @@ regex>=2023.10.3
 
 # ===== WEB SCRAPING =====
 beautifulsoup4>=4.12.3
-lxml>=5.1.0
+lxml>=5.3.0
 selectolax>=0.3.17
 trafilatura>=1.6.4
-aiohttp>=3.9.3  # Compatible avec aiohttp-session
+aiohttp>=3.10  # Compatible avec aiohttp-session
 httpx>=0.27.0   # Compatible avec ollama
 aiofiles>=23.2.0
 fake-useragent>=1.4.0
