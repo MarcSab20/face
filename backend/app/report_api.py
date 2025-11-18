@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 import logging
 import asyncio
 import json
+import uuid
+from pathlib import Path
+import asyncio
 from datetime import datetime, timedelta
 
 from app.database import get_db
@@ -21,6 +24,8 @@ logger = logging.getLogger(__name__)
 # Router
 intelligent_reports_router = APIRouter(prefix="/api/intelligent-reports", tags=["intelligent-reports"])
 
+# Dictionnaire de cache des rapports
+report_cache = {}
 
 # ===== Modèles Pydantic =====
 
@@ -82,99 +87,6 @@ class ReportGenerationResponse(BaseModel):
 
 
 # ===== Routes =====
-
-@intelligent_reports_router.post("/generate", response_model=ReportGenerationResponse)
-async def generate_intelligent_report(
-    request: IntelligentReportRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """
-    Générer un rapport intelligent avec IA souveraine
-    
-    Cette endpoint lance une analyse IA complète incluant:
-    - Analyse de sentiment avancée
-    - Détection de tendances et signaux faibles  
-    - Évaluation des influenceurs et risques
-    - Extraction et analyse du contenu web
-    - Recommandations actionnables
-    """
-    try:
-        # Vérifier que les mots-clés existent
-        keywords = db.query(Keyword).filter(Keyword.id.in_(request.keyword_ids)).all()
-        if not keywords:
-            raise HTTPException(status_code=404, detail="Aucun mot-clé trouvé")
-        
-        if len(request.keyword_ids) > 10:
-            raise HTTPException(
-                status_code=400, 
-                detail="Maximum 10 mots-clés par rapport"
-            )
-        
-        # Vérifier qu'il y a des données à analyser
-        since_date = datetime.utcnow() - timedelta(days=request.days)
-        mentions_count = db.query(Mention).filter(
-            Mention.keyword_id.in_(request.keyword_ids),
-            Mention.published_at >= since_date
-        ).count()
-        
-        if mentions_count == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="Aucune mention trouvée pour cette période"
-            )
-        
-        # Initialiser le générateur
-        generator = IntelligentReportGenerator(db)
-        
-        # Mesurer le temps de traitement
-        start_time = datetime.utcnow()
-        
-        logger.info(f"Début génération rapport IA: {len(keywords)} mots-clés, {request.days} jours")
-        
-        # Générer le rapport avec l'IA
-        report_data = await generator.generate_complete_report(
-            keyword_ids=request.keyword_ids,
-            days=request.days,
-            report_title=request.report_title,
-            include_web_analysis=request.include_web_analysis,
-            format_type=request.format
-        )
-        
-        processing_time = (datetime.utcnow() - start_time).total_seconds()
-        
-        # Générer le fichier final
-        if request.format == "pdf":
-            content = await generator.generate_pdf_report(report_data)
-            media_type = "application/pdf"
-            filename = f"rapport_ia_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
-        else:
-            content = await generator.generate_html_report(report_data)
-            media_type = "text/html"
-            filename = f"rapport_ia_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html"
-        
-        logger.info(f"Rapport IA généré en {processing_time:.1f}s")
-        
-        # Retourner le fichier
-        headers = {
-            "Content-Disposition": f"attachment; filename={filename}",
-            "Content-Type": media_type
-        }
-        
-        return Response(
-            content=content,
-            media_type=media_type,
-            headers=headers
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Erreur génération rapport IA: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur lors de la génération du rapport: {str(e)}"
-        )
 
 
 @intelligent_reports_router.post("/preview", response_model=IntelligentReportPreview)
@@ -301,7 +213,191 @@ async def preview_intelligent_report(
             detail=f"Erreur lors de la prévisualisation: {str(e)}"
         )
 
+@intelligent_reports_router.post("/generate-ministerial-async")
+async def generate_ministerial_report_async(
+    request: IntelligentReportRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Générer le rapport ministériel de manière asynchrone
+    Évite les problèmes CORS en utilisant GET pour le téléchargement
+    """
+    report_id = str(uuid.uuid4())
+    
+    # Mettre en file d'attente
+    report_cache[report_id] = {
+        'status': 'generating',
+        'progress': 0,
+        'created_at': datetime.utcnow()
+    }
+    
+    async def generate_report():
+        try:
+            logger.info(f"🚀 Début génération rapport {report_id}")
+            
+            # Vérifier les mots-clés
+            keywords = db.query(Keyword).filter(Keyword.id.in_(request.keyword_ids)).all()
+            if not keywords:
+                report_cache[report_id] = {
+                    'status': 'error',
+                    'error': 'Aucun mot-clé trouvé'
+                }
+                return
+            
+            report_cache[report_id]['progress'] = 10
+            
+            # Vérifier les données
+            since_date = datetime.utcnow() - timedelta(days=request.days)
+            mentions_count = db.query(Mention).filter(
+                Mention.keyword_id.in_(request.keyword_ids),
+                Mention.published_at >= since_date
+            ).count()
+            
+            if mentions_count == 0:
+                report_cache[report_id] = {
+                    'status': 'error',
+                    'error': 'Aucune mention trouvée pour cette période'
+                }
+                return
+            
+            report_cache[report_id]['progress'] = 20
+            logger.info(f"📊 {mentions_count} mentions trouvées")
+            
+            # Générer le rapport avec IA
+            from app.report_generator import StrategicReportGeneratorV3
+            generator = StrategicReportGeneratorV3(db)
+            
+            report_cache[report_id]['progress'] = 30
+            
+            report_data = await generator.generate_ministerial_report(
+                keyword_ids=request.keyword_ids,
+                days=request.days,
+                report_title=request.report_title or "Rapport Stratégique Ministériel"
+            )
+            
+            report_cache[report_id]['progress'] = 70
+            logger.info(f"✅ Données du rapport générées")
+            
+            # Générer HTML
+            from app.report_template import generate_ministerial_report_html
+            html_content = generate_ministerial_report_html(report_data)
+            
+            report_cache[report_id]['progress'] = 80
+            
+            # Sauvegarder le fichier
+            output_dir = Path("/mnt/user-data/outputs")
+            output_dir.mkdir(exist_ok=True)
+            
+            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+            
+            if request.format == 'pdf':
+                from weasyprint import HTML
+                pdf_bytes = HTML(string=html_content).write_pdf()
+                
+                filename = f"rapport_ministeriel_{timestamp}.pdf"
+                filepath = output_dir / filename
+                
+                with open(filepath, 'wb') as f:
+                    f.write(pdf_bytes)
+                
+                content_type = "application/pdf"
+                
+            else:
+                filename = f"rapport_ministeriel_{timestamp}.html"
+                filepath = output_dir / filename
+                
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(html_content)
+                
+                content_type = "text/html"
+            
+            report_cache[report_id]['progress'] = 100
+            
+            # Mettre à jour le cache avec succès
+            report_cache[report_id] = {
+                'status': 'ready',
+                'filename': filename,
+                'filepath': str(filepath),
+                'content_type': content_type,
+                'generated_at': datetime.utcnow(),
+                'size': filepath.stat().st_size
+            }
+            
+            logger.info(f"✅ Rapport {report_id} généré avec succès: {filepath}")
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur génération rapport {report_id}: {e}", exc_info=True)
+            report_cache[report_id] = {
+                'status': 'error',
+                'error': str(e),
+                'failed_at': datetime.utcnow()
+            }
+    
+    # Lancer en arrière-plan
+    background_tasks.add_task(generate_report)
+    
+    return {
+        "report_id": report_id,
+        "status": "generating",
+        "message": "Génération du rapport lancée",
+        "check_url": f"/api/intelligent-reports/status/{report_id}",
+        "download_url": f"/api/intelligent-reports/download/{report_id}"
+    }
 
+
+@intelligent_reports_router.get("/status/{report_id}")
+async def check_report_status(report_id: str):
+    """Vérifier le statut d'un rapport"""
+    if report_id not in report_cache:
+        raise HTTPException(status_code=404, detail="Rapport non trouvé")
+    
+    info = report_cache[report_id]
+    
+    return {
+        "report_id": report_id,
+        "status": info['status'],
+        "progress": info.get('progress', 0),
+        "error": info.get('error'),
+        "filename": info.get('filename'),
+        "size": info.get('size'),
+        "download_url": f"/api/intelligent-reports/download/{report_id}" if info['status'] == 'ready' else None
+    }
+
+
+@intelligent_reports_router.get("/download/{report_id}")
+async def download_report(report_id: str):
+    """Télécharger un rapport généré (GET simple, pas de CORS)"""
+    if report_id not in report_cache:
+        raise HTTPException(status_code=404, detail="Rapport non trouvé")
+    
+    info = report_cache[report_id]
+    
+    if info['status'] != 'ready':
+        if info['status'] == 'error':
+            raise HTTPException(status_code=500, detail=info.get('error', 'Erreur de génération'))
+        else:
+            raise HTTPException(status_code=425, detail="Rapport en cours de génération")
+    
+    filepath = Path(info['filepath'])
+    
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouvé sur le serveur")
+    
+    # Lire le fichier
+    with open(filepath, 'rb') as f:
+        content = f.read()
+    
+    headers = {
+        "Content-Disposition": f'attachment; filename="{info["filename"]}"',
+    }
+    
+    return Response(
+        content=content,
+        media_type=info['content_type'],
+        headers=headers
+    )
+    
 @intelligent_reports_router.get("/ai-status", response_model=AIServiceStatus)
 async def get_ai_service_status():
     """
@@ -475,103 +571,21 @@ async def get_ai_capabilities():
         ]
     }
 
-@intelligent_reports_router.post("/generate-strategic")
-async def generate_strategic_report(
-    request: IntelligentReportRequest,
-    db: Session = Depends(get_db)
-):
-    """
-    Générer un rapport stratégique optimisé pour communication/contre-information
-    
-    Structure en 5 sections majeures:
-    1. Synthèse Générale Stratégique
-    2. Contenus à Tonalité Positive
-    3. Contenus à Tonalité Négative  
-    4. Contenus à Tonalité Neutre
-    5. Activistes et Comptes Sensibles
-    """
-    try:
-        logger.info(f"🎯 Démarrage génération rapport stratégique")
-        
-        # Vérifier les paramètres
-        keywords = db.query(Keyword).filter(Keyword.id.in_(request.keyword_ids)).all()
-        if not keywords:
-            raise HTTPException(status_code=404, detail="Aucun mot-clé trouvé")
-        
-        logger.info(f"Mots-clés: {[k.keyword for k in keywords]}")
-        
-        # Vérifier les données
-        since_date = datetime.utcnow() - timedelta(days=request.days)
-        mentions_count = db.query(Mention).filter(
-            Mention.keyword_id.in_(request.keyword_ids),
-            Mention.published_at >= since_date
-        ).count()
-        
-        if mentions_count == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="Aucune mention trouvée pour cette période"
-            )
-        
-        # Initialiser le générateur stratégique
-        from app.report_generator import StrategicReportGeneratorV3
-        generator = StrategicReportGeneratorV3(db)
-        
-        # Générer le rapport stratégique
-        start_time = datetime.utcnow()
-        logger.info("🤖 Analyse IA stratégique en cours...")
-        
-        report_data = await generator.generate_strategic_report(
-            keyword_ids=request.keyword_ids,
-            days=request.days,
-            report_title=request.report_title or "Rapport Stratégique"
-        )
-        
-        processing_time = (datetime.utcnow() - start_time).total_seconds()
-        logger.info(f"✅ Rapport généré en {processing_time:.1f}s")
-        
-        # Générer le HTML
-        from app.report_template import generate_strategic_report_html
-        html_content = generate_strategic_report_html(report_data)
-        
-        if request.format == 'pdf':
-            # Convertir en PDF avec WeasyPrint
-            try:
-                from weasyprint import HTML
-                
-                pdf_bytes = HTML(string=html_content).write_pdf()
-                
-                return Response(
-                    content=pdf_bytes,
-                    media_type="application/pdf",
-                    headers={
-                        "Content-Disposition": f"attachment; filename=rapport_strategique_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
-                    }
-                )
-            except Exception as e:
-                logger.error(f"❌ Erreur génération PDF: {e}", exc_info=True)
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Erreur lors de la génération du PDF: {str(e)}"
-                )
-        else:
-            # Retourner HTML
-            return Response(
-                content=html_content,
-                media_type="text/html",
-                headers={
-                    "Content-Disposition": f"attachment; filename=rapport_strategique_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html"
-                }
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Erreur inattendue génération rapport stratégique: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur inattendue: {str(e)}"
-        )
+# Ajouter AVANT l'endpoint POST generate-ministerial
+@intelligent_reports_router.options("/generate-ministerial")
+async def options_ministerial_report():
+    """Handle preflight CORS request"""
+    return Response(
+        content="",
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, X-Requested-With",
+            "Access-Control-Max-Age": "3600",
+        }
+    )
+
 
 @intelligent_reports_router.post("/generate-ministerial")
 async def generate_ministerial_report(
@@ -580,7 +594,6 @@ async def generate_ministerial_report(
 ):
     """
     Rapport V3 - Style Ministériel Narratif
-    Texte rédigé, paragraphes argumentés, analyse stratégique
     """
     try:
         # Vérifications
@@ -608,20 +621,33 @@ async def generate_ministerial_report(
             from weasyprint import HTML
             pdf_bytes = HTML(string=html_content).write_pdf()
             
+            # CORRECTION: Ajouter explicitement les en-têtes CORS
+            headers = {
+                "Content-Disposition": f"attachment; filename=rapport_ministeriel_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            }
+            
             return Response(
                 content=pdf_bytes,
                 media_type="application/pdf",
-                headers={
-                    "Content-Disposition": f"attachment; filename=rapport_ministeriel_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
-                }
+                headers=headers
             )
         else:
+            headers = {
+                "Content-Disposition": f"attachment; filename=rapport_ministeriel_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Expose-Headers": "Content-Disposition",
+            }
+            
             return Response(
                 content=html_content,
                 media_type="text/html",
-                headers={
-                    "Content-Disposition": f"attachment; filename=rapport_ministeriel_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html"
-                }
+                headers=headers
             )
             
     except Exception as e:
@@ -914,94 +940,6 @@ def generate_report_async(
     # Lancer la tâche asynchrone
     asyncio.create_task(_generate())
 
-# Ajouter une nouvelle route
-@intelligent_reports_router.post("/generate-executive")
-async def generate_executive_report(
-    request: IntelligentReportRequest,
-    db: Session = Depends(get_db)
-):
-    """
-    Générer un rapport exécutif narratif
-    Focus sur la synthèse et les recommandations actionnables
-    """
-    try:
-        logger.info(f"🎯 Démarrage génération rapport exécutif")
-        
-        # Vérifier les paramètres
-        keywords = db.query(Keyword).filter(Keyword.id.in_(request.keyword_ids)).all()
-        if not keywords:
-            raise HTTPException(status_code=404, detail="Aucun mot-clé trouvé")
-        
-        logger.info(f"Mots-clés trouvés: {[k.keyword for k in keywords]}")
-        
-        # Initialiser le générateur exécutif
-        exec_generator = IntelligentReportGenerator(db)
-        
-        # Générer le rapport avec gestion d'erreur robuste
-        try:
-            report_data = await exec_generator.generate_executive_report(
-                keyword_ids=request.keyword_ids,
-                days=request.days,
-                report_title=request.report_title,
-                format_type=request.format
-            )
-            logger.info("✅ Données du rapport générées avec succès")
-        except Exception as e:
-            logger.error(f"❌ Erreur lors de la génération des données: {e}", exc_info=True)
-            raise HTTPException(
-                status_code=500,
-                detail=f"Erreur lors de la génération des données du rapport: {str(e)}"
-            )
-        
-        # Générer le HTML
-        try:
-            # Pour l'instant, générer un HTML simple si le template n'existe pas
-            html_content = generate_simple_executive_html(report_data)
-            logger.info("✅ HTML généré avec succès")
-        except Exception as e:
-            logger.error(f"❌ Erreur lors de la génération HTML: {e}", exc_info=True)
-            raise HTTPException(
-                status_code=500,
-                detail=f"Erreur lors de la génération du HTML: {str(e)}"
-            )
-        
-        if request.format == 'pdf':
-            try:
-                # Convertir en PDF
-                from weasyprint import HTML
-                pdf_bytes = HTML(string=html_content).write_pdf()
-                
-                return Response(
-                    content=pdf_bytes,
-                    media_type="application/pdf",
-                    headers={
-                        "Content-Disposition": f"attachment; filename=rapport_executif_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
-                    }
-                )
-            except Exception as e:
-                logger.error(f"❌ Erreur lors de la génération PDF: {e}", exc_info=True)
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Erreur lors de la génération du PDF: {str(e)}"
-                )
-        else:
-            # Retourner HTML
-            return Response(
-                content=html_content,
-                media_type="text/html",
-                headers={
-                    "Content-Disposition": f"attachment; filename=rapport_executif_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html"
-                }
-            )
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"❌ Erreur inattendue génération rapport exécutif: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur inattendue: {str(e)}"
-        )
 
 def generate_simple_executive_html(report_data: Dict) -> str:
     """Générer un HTML simple pour le rapport exécutif"""

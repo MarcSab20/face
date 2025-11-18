@@ -46,11 +46,12 @@ app = FastAPI(
 # CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # En production, spécifier les domaines
     allow_credentials=True,
     allow_methods=["*"],
-    expose_headers=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition", "Content-Type", "Content-Length"],  # IMPORTANT
+    max_age=3600,  # Cache preflight pendant 1h
 )
 
 # Initialiser la base de données au démarrage

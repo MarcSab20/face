@@ -466,10 +466,33 @@ Réponds en JSON:
         return '\n'.join(context_parts)
     
     def _fallback_narrative_analysis(self, mentions: List[Mention], web_contents: List[Dict]) -> Dict:
-        """Analyse fallback narrative"""
-        negative_count = sum(1 for m in mentions if m.sentiment == 'negative')
-        negative_ratio = negative_count / len(mentions) if mentions else 0
+        """Analyse fallback avec contenu réel basé sur les données"""
         
+        if not mentions:
+            return self._generate_empty_analysis()
+        
+        # Analyser les données réelles
+        negative_count = sum(1 for m in mentions if m.sentiment == 'negative')
+        positive_count = sum(1 for m in mentions if m.sentiment == 'positive')
+        neutral_count = sum(1 for m in mentions if m.sentiment == 'neutral')
+        total = len(mentions)
+        
+        negative_ratio = negative_count / total
+        positive_ratio = positive_count / total
+        
+        # Analyser les sources
+        sources = {}
+        for m in mentions:
+            sources[m.source] = sources.get(m.source, 0) + 1
+        top_sources = sorted(sources.items(), key=lambda x: x[1], reverse=True)[:3]
+        
+        # Analyser les auteurs les plus actifs
+        authors = {}
+        for m in mentions:
+            authors[m.author] = authors.get(m.author, 0) + 1
+        top_authors = sorted(authors.items(), key=lambda x: x[1], reverse=True)[:5]
+        
+        # Déterminer criticité
         if negative_ratio > 0.6:
             criticite = "ÉLEVÉ"
             menace = "OUI"
@@ -483,38 +506,124 @@ Réponds en JSON:
             menace = "NON"
             paix = "STABLE"
         
-        synthese_text = f"""L'analyse de {len(mentions)} publications sur {len(set(m.source for m in mentions))} sources révèle une situation {paix.lower()}. """
+        # GÉNÉRER SYNTHÈSE NARRATIVE RÉELLE
+        synthese_text = f"""L'analyse de {total} publications sur une période de {len(set(m.source for m in mentions))} sources distinctes révèle une situation {paix.lower()}. """
         
         if negative_ratio > 0.5:
-            synthese_text += f"Le sentiment négatif domine ({negative_ratio:.0%}), reflétant des préoccupations marquées au sein de l'opinion publique. "
+            synthese_text += f"Le sentiment négatif domine largement ({negative_ratio:.0%}), reflétant des préoccupations marquées au sein de l'opinion publique surveillée. "
+        elif positive_ratio > 0.5:
+            synthese_text += f"Le sentiment positif domine ({positive_ratio:.0%}), indiquant une opinion publique plutôt favorable. "
         else:
-            synthese_text += f"Le ton reste globalement modéré, bien que {negative_ratio:.0%} des contenus expriment des critiques. "
+            synthese_text += f"Le ton reste globalement partagé entre opinions positives ({positive_ratio:.0%}) et négatives ({negative_ratio:.0%}). "
         
-        synthese_text += f"Les intérêts de l'État {'sont potentiellement menacés' if menace == 'OUI' else 'ne semblent pas directement menacés'} dans l'immédiat. "
+        synthese_text += f"\n\nLes trois principales sources de publications sont {', '.join([s[0] for s in top_sources[:2]])} et {top_sources[2][0] if len(top_sources) > 2 else 'autres'}. "
         
-        if len(web_contents) > 0:
-            total_comments = sum(len(wc.get('comments', [])) for wc in web_contents)
-            synthese_text += f"L'examen de {total_comments} commentaires d'internautes permet de mieux cerner les véritables préoccupations citoyennes."
+        if menace == 'OUI':
+            synthese_text += f"Les intérêts de l'État sont potentiellement menacés compte tenu du niveau élevé de critiques détectées. "
+        else:
+            synthese_text += f"Les intérêts de l'État ne semblent pas directement menacés dans l'immédiat. "
         
+            if len(web_contents) > 0:
+                total_comments = sum(len(wc.get('comments', [])) for wc in web_contents)
+                synthese_text += f"\n\nL'examen de {total_comments} commentaires d'internautes sur {len(web_contents)} articles permet de mieux cerner les véritables préoccupations citoyennes au-delà des publications officielles."
+            
+            # GÉNÉRER ANALYSE DE SITUATION
+            analyse_sit_text = f"""Les {total} publications analysées couvrent principalement les plateformes {', '.join([s[0] for s in top_sources])}. """
+            
+            # Identifier les thèmes à partir des titres
+            all_titles = ' '.join([m.title for m in mentions]).lower()
+            themes_detectes = []
+            
+            theme_keywords = {
+                'politique': ['gouvernement', 'ministre', 'président', 'élection', 'politique'],
+                'économie': ['économie', 'argent', 'prix', 'inflation', 'budget'],
+                'social': ['social', 'société', 'peuple', 'manifestation', 'grève'],
+                'sécurité': ['sécurité', 'police', 'crime', 'violence', 'danger']
+            }
+            
+            for theme, keywords in theme_keywords.items():
+                if any(kw in all_titles for kw in keywords):
+                    themes_detectes.append(theme)
+            
+            if themes_detectes:
+                analyse_sit_text += f"Les thèmes dominants identifiés concernent : {', '.join(themes_detectes)}. "
+            
+            # Analyser les auteurs influents
+            analyse_sit_text += f"\n\nParmi les contributeurs les plus actifs, on retrouve {top_authors[0][0]} avec {top_authors[0][1]} publications, "
+            if len(top_authors) > 1:
+                analyse_sit_text += f"suivi de {top_authors[1][0]} ({top_authors[1][1]} publications). "
+            
+            if negative_ratio > 0.5:
+                analyse_sit_text += f"\n\nLe ton critique prédominant suggère une insatisfaction face à certains aspects de la situation actuelle. "
+            
+            # ÉVALUATION DES MENACES
+            eval_menaces_text = f"""Sur la base des {total} contenus analysés, l'évaluation des menaces révèle les éléments suivants. """
+            
+            # Chercher des mots-clés de menace
+            threat_keywords = ['crise', 'danger', 'menace', 'violence', 'guerre', 'conflit']
+            threats_found = []
+            for m in mentions:
+                content_lower = f"{m.title} {m.content}".lower()
+                for threat in threat_keywords:
+                    if threat in content_lower:
+                        threats_found.append(threat)
+                        break
+            
+            if threats_found:
+                eval_menaces_text += f"Des mentions de termes sensibles ont été détectées ({len(threats_found)} occurrences), incluant des références à {', '.join(set(threats_found)[:3])}. "
+            else:
+                eval_menaces_text += f"Aucun terme explicitement menaçant n'a été détecté dans le corpus analysé. "
+            
+            # Engagement
+            high_engagement = [m for m in mentions if m.engagement_score > 10000]
+            if high_engagement:
+                eval_menaces_text += f"\n\n{len(high_engagement)} publication(s) ont généré un engagement particulièrement élevé (>10K), suggérant une forte résonance auprès du public. "
+            
+            if negative_ratio > 0.6:
+                eval_menaces_text += f"\n\nLe niveau élevé de sentiment négatif ({negative_ratio:.0%}) combiné à l'engagement détecté nécessite une surveillance accrue et une possible stratégie de communication corrective."
+            else:
+                eval_menaces_text += f"\n\nLe niveau global de menace reste maîtrisable à ce stade, bien qu'une vigilance continue soit recommandée."
+            
+            return {
+                'synthese_executive': {
+                    'texte': synthese_text,
+                    'niveau_criticite': criticite,
+                    'menace_etat': menace,
+                    'paix_publique': paix
+                },
+                'analyse_situation': {
+                    'texte': analyse_sit_text,
+                    'themes_dominants': themes_detectes,
+                    'sentiment_general': 'négatif' if negative_ratio > 0.5 else ('positif' if positive_ratio > 0.5 else 'mitigé')
+                },
+                'evaluation_menaces': {
+                    'texte': eval_menaces_text,
+                    'menaces_identifiees': threats_found[:3],
+                    'niveau_mobilisation': "ÉLEVÉ" if len(high_engagement) > 10 else ("MOYEN" if len(high_engagement) > 5 else "FAIBLE")
+                }
+            }
+
+    def _generate_empty_analysis(self) -> Dict:
+        """Analyse vide si aucune donnée"""
         return {
             'synthese_executive': {
-                'texte': synthese_text,
-                'niveau_criticite': criticite,
-                'menace_etat': menace,
-                'paix_publique': paix
+                'texte': "Aucune donnée disponible pour générer une analyse pertinente.",
+                'niveau_criticite': 'FAIBLE',
+                'menace_etat': 'NON',
+                'paix_publique': 'STABLE'
             },
             'analyse_situation': {
-                'texte': "L'analyse détaillée des thématiques dominantes sera produite avec un modèle IA plus performant (Mistral recommandé).",
+                'texte': "Impossible de produire une analyse faute de données sur la période sélectionnée.",
                 'themes_dominants': [],
-                'sentiment_general': 'négatif' if negative_ratio > 0.5 else 'mitigé'
+                'sentiment_general': 'inconnu'
             },
             'evaluation_menaces': {
-                'texte': "L'évaluation approfondie des menaces nécessite un modèle IA plus puissant pour une analyse sémantique avancée.",
+                'texte': "Aucune menace identifiable en l'absence de données à analyser.",
                 'menaces_identifiees': [],
-                'niveau_mobilisation': "MOYEN" if len(mentions) > 50 else "FAIBLE"
+                'niveau_mobilisation': 'FAIBLE'
             }
         }
-    
+
     def _fallback_comments_synthesis(self, comments: List[Dict]) -> Dict:
         """Synthèse commentaires fallback"""
         if not comments:

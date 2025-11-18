@@ -143,153 +143,6 @@ export default function IntelligentReports() {
     );
   };
 
-  const handleGenerateReport = async () => {
-    if (selectedKeywords.length === 0) {
-      toast.error('Veuillez sélectionner au moins un mot-clé');
-      return;
-    }
-
-    if (!reportTitle.trim()) {
-      toast.error('Veuillez saisir le titre du rapport');
-      return;
-    }
-
-    if (!aiStatusData?.ai_available) {
-      toast.error('Service IA non disponible. Vérifiez la configuration.');
-      return;
-    }
-
-    setIsGenerating(true);
-
-    try {
-      const response = await axios.post(
-        `${API_BASE_URL}/api/intelligent-reports/generate`,
-        {
-          keyword_ids: selectedKeywords,
-          days: periodDays,
-          report_title: reportTitle,
-          include_web_analysis: includeWebAnalysis,
-          format: format,
-        },
-        {
-          responseType: 'blob', // Important pour recevoir les fichiers binaires
-        }
-      );
-
-      // Télécharger le fichier
-      const blob = new Blob([response.data], { 
-        type: format === 'pdf' ? 'application/pdf' : 'text/html' 
-      });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const timestamp = new Date().toISOString().split('T')[0];
-      link.download = `rapport_intelligent_${timestamp}.${format}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      toast.success('🤖 Rapport intelligent généré avec succès !');
-    } catch (error: any) {
-      console.error('Erreur génération rapport intelligent:', error);
-      const errorMsg = error.response?.data?.detail || 'Erreur lors de la génération du rapport intelligent';
-      toast.error(errorMsg);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  const handleGenerateExecutiveReport = async () => {
-  if (selectedKeywords.length === 0 || !reportTitle.trim()) {
-    toast.error('Veuillez sélectionner des mots-clés et saisir un titre');
-    return;
-  }
-
-  if (!aiStatusData?.ai_available) {
-    toast.error('Service IA non disponible. Vérifiez la configuration.');
-    return;
-  }
-
-  setIsGenerating(true);
-  
-  // Toast avec progression
-  const loadingToast = toast.loading(
-    '🤖 Analyse IA en cours... Lecture des contenus, classification, synthèse... Patientez 2-5 min',
-    { duration: 6000000 }
-  );
-
-  try {
-    console.log('🚀 Début génération rapport exécutif');
-    console.log('Mots-clés:', selectedKeywords);
-    console.log('Période:', periodDays);
-    
-    const response = await apiClient.post(
-      '/api/intelligent-reports/generate-executive',
-      {
-        keyword_ids: selectedKeywords,
-        days: periodDays,
-        report_title: reportTitle,
-        format: format,
-      },
-      {
-        responseType: 'blob',
-        onDownloadProgress: (progressEvent) => {
-          if (progressEvent.loaded > 0) {
-            toast.loading('📥 Réception du rapport...', { id: loadingToast });
-          }
-        }
-      }
-    );
-
-    console.log('✅ Rapport reçu, taille:', response.data.size);
-    
-    toast.dismiss(loadingToast);
-
-    // Vérifier que le blob n'est pas vide
-    if (response.data.size === 0) {
-      throw new Error('Le rapport généré est vide');
-    }
-
-    // Télécharger le fichier
-    const blob = new Blob([response.data], { 
-      type: format === 'pdf' ? 'application/pdf' : 'text/html' 
-    });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `rapport_executif_${new Date().toISOString().split('T')[0]}.${format}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-
-    toast.success('🎯 Rapport exécutif généré avec succès !', { duration: 5000 });
-    
-  } catch (error: any) {
-    console.error('❌ Erreur génération rapport:', error);
-    toast.dismiss(loadingToast);
-    
-    let errorMsg = 'Erreur lors de la génération du rapport exécutif';
-    
-    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-      errorMsg = '⏱️ Timeout: Le rapport prend trop de temps. Essayez avec moins de données ou une période plus courte.';
-    } else if (error.code === 'ERR_NETWORK') {
-      errorMsg = '🔌 Erreur réseau: Vérifiez que le backend est accessible et qu\'Ollama fonctionne.';
-    } else if (error.response?.status === 500) {
-      errorMsg = '🤖 Erreur serveur: ' + (error.response?.data?.detail || 'Problème avec l\'analyse IA');
-    } else if (error.response?.status === 400) {
-      errorMsg = error.response?.data?.detail || 'Données invalides';
-    }
-    
-    toast.error(errorMsg, { duration: 7000 });
-    
-  } finally {
-    setIsGenerating(false);
-  }
-};
-
-
   const handlePreview = async () => {
     if (selectedKeywords.length === 0) {
       toast.error('Veuillez sélectionner au moins un mot-clé');
@@ -314,140 +167,106 @@ export default function IntelligentReports() {
   };
 
   const handleGenerateMinisterialReport = async () => {
-    if (selectedKeywords.length === 0 || !reportTitle.trim()) {
-      toast.error('Veuillez sélectionner des mots-clés et saisir un titre');
-      return;
-    }
+  if (selectedKeywords.length === 0 || !reportTitle.trim()) {
+    toast.error('Veuillez sélectionner des mots-clés et saisir un titre');
+    return;
+  }
 
-    setIsGenerating(true);
-    
-    const loadingToast = toast.loading(
-      '📝 Rédaction du rapport ministériel... L\'IA analyse et rédige... Patientez',
-      { duration: 600000 }
-    );
+  setIsGenerating(true);
+  
+  const loadingToast = toast.loading(
+    '📝 Lancement génération rapport ministériel...',
+    { duration: 600000 }
+  );
 
-    try {
-      const response = await apiClient.post(
-        '/api/intelligent-reports/generate-ministerial',
-        {
-          keyword_ids: selectedKeywords,
-          days: periodDays,
-          report_title: reportTitle,
-          format: format,
-        },
-        {
-          responseType: 'blob',
-        }
-      );
-      
-      toast.dismiss(loadingToast);
-
-      // Télécharger
-      const blob = new Blob([response.data], { 
-        type: format === 'pdf' ? 'application/pdf' : 'text/html' 
-      });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `rapport_ministeriel_${new Date().toISOString().split('T')[0]}.${format}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      toast.success('📝 Rapport ministériel généré avec succès !', { duration: 5000 });
-      
-    } catch (error: any) {
-      console.error('Erreur:', error);
-      toast.dismiss(loadingToast);
-      toast.error('Erreur lors de la génération du rapport ministériel', { duration: 7000 });
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-    const handleGenerateStrategicReport = async () => {
-    if (selectedKeywords.length === 0 || !reportTitle.trim()) {
-      toast.error('Veuillez sélectionner des mots-clés et saisir un titre');
-      return;
-    }
-
-    if (!aiStatusData?.ai_available) {
-      toast.error('Service IA non disponible. Vérifiez la configuration.');
-      return;
-    }
-
-    setIsGenerating(true);
-    
-    const loadingToast = toast.loading(
-      '🎯 Génération rapport stratégique... Classification, analyse activistes, synthèse... Patientez quelques minutes',
-      { duration: 6000000 }
-    );
-
-    try {
-      console.info('🚀 Début génération rapport stratégique');
-      
-      const response = await apiClient.post(
-        '/api/intelligent-reports/generate-strategic',
-        {
-          keyword_ids: selectedKeywords,
-          days: periodDays,
-          report_title: reportTitle,
-          format: format,
-        },
-        {
-          responseType: 'blob',
-          onDownloadProgress: (progressEvent) => {
-            if (progressEvent.loaded > 0) {
-              toast.loading('📥 Réception du rapport...', { id: loadingToast });
-            }
-          }
-        }
-      );
-      
-      toast.dismiss(loadingToast);
-
-      if (response.data.size === 0) {
-        throw new Error('Le rapport généré est vide');
+  try {
+    // ÉTAPE 1: Lancer la génération asynchrone
+    const initResponse = await apiClient.post(
+      '/api/intelligent-reports/generate-ministerial-async',
+      {
+        keyword_ids: selectedKeywords,
+        days: periodDays,
+        report_title: reportTitle,
+        format: format,
       }
-
-      // Télécharger le fichier
-      const blob = new Blob([response.data], { 
-        type: format === 'pdf' ? 'application/pdf' : 'text/html' 
-      });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `rapport_strategique_${new Date().toISOString().split('T')[0]}.${format}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
-      toast.success('🎯 Rapport stratégique généré avec succès !', { duration: 5000 });
+    );
+    
+    const { report_id } = initResponse.data;
+    console.log('🆔 Report ID:', report_id);
+    
+    // ÉTAPE 2: Polling pour vérifier le statut
+    let ready = false;
+    let attempts = 0;
+    const maxAttempts = 120; // 10 minutes max (5s * 120)
+    
+    while (!ready && attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 5000)); // Attendre 5 secondes
       
-    } catch (error: any) {
-      console.error('❌ Erreur génération rapport:', error);
-      toast.dismiss(loadingToast);
-      
-      let errorMsg = 'Erreur lors de la génération du rapport stratégique';
-      
-      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        errorMsg = '⏱️ Timeout: Le rapport prend trop de temps. Essayez avec moins de données.';
-      } else if (error.code === 'ERR_NETWORK') {
-        errorMsg = '🔌 Erreur réseau: Vérifiez que le backend est accessible.';
-      } else if (error.response?.status === 500) {
-        errorMsg = '🤖 Erreur serveur: ' + (error.response?.data?.detail || 'Problème avec l\'analyse IA');
-      } else if (error.response?.status === 400) {
-        errorMsg = error.response?.data?.detail || 'Données invalides';
+      try {
+        const statusResponse = await apiClient.get(
+          `/api/intelligent-reports/status/${report_id}`
+        );
+        
+        const status = statusResponse.data;
+        console.log('📊 Statut:', status);
+        
+        if (status.status === 'ready') {
+          ready = true;
+          toast.loading(`✅ Rapport prêt ! Téléchargement...`, { id: loadingToast });
+        } else if (status.status === 'error') {
+          throw new Error(status.error || 'Erreur de génération');
+        } else {
+          const progress = status.progress || 0;
+          toast.loading(
+            `📝 Génération en cours... ${progress}% (${attempts * 5}s)`, 
+            { id: loadingToast }
+          );
+        }
+      } catch (statusError: any) {
+        if (statusError.response?.status === 404) {
+          throw new Error('Rapport perdu ou expiré');
+        }
+        console.error('Erreur vérification statut:', statusError);
       }
       
-      toast.error(errorMsg, { duration: 7000 });
-      
-    } finally {
-      setIsGenerating(false);
+      attempts++;
     }
-  };
+    
+    if (!ready) {
+      throw new Error('Timeout: Le rapport prend trop de temps à générer (10 min max)');
+    }
+    
+    toast.dismiss(loadingToast);
+    
+    // ÉTAPE 3: Télécharger via GET (pas de problème CORS!)
+    const downloadUrl = `${API_BASE_URL}/api/intelligent-reports/download/${report_id}`;
+    
+    console.log('📥 Téléchargement:', downloadUrl);
+    
+    // Ouvrir dans nouvel onglet (le navigateur gère le téléchargement)
+    window.open(downloadUrl, '_blank');
+    
+    toast.success('📝 Rapport ministériel généré et téléchargé !', { duration: 5000 });
+    
+  } catch (error: any) {
+    console.error('❌ Erreur complète:', error);
+    toast.dismiss(loadingToast);
+    
+    let errorMsg = 'Erreur lors de la génération du rapport ministériel';
+    
+    if (error.message) {
+      errorMsg = error.message;
+    } else if (error.response?.data?.detail) {
+      errorMsg = error.response.data.detail;
+    } else if (error.code === 'ERR_NETWORK') {
+      errorMsg = '🔌 Erreur réseau: Vérifiez que le backend est accessible';
+    }
+    
+    toast.error(errorMsg, { duration: 7000 });
+  } finally {
+    setIsGenerating(false);
+  }
+};
 
   const getRiskColor = (riskLevel?: string) => {
     switch (riskLevel) {
@@ -745,83 +564,6 @@ export default function IntelligentReports() {
                 >
                   <Eye className="w-4 h-4" />
                   <span>Prévisualiser IA</span>
-                </button>
-
-                <button
-                  onClick={handleGenerateStrategicReport}
-                  disabled={
-                    selectedKeywords.length === 0 ||
-                    !reportTitle.trim() ||
-                    isGenerating ||
-                    !aiStatusData?.ai_available
-                  }
-                  className="btn w-full flex items-center justify-center space-x-2"
-                  style={{
-                    background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                    color: 'white'
-                  }}
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Génération...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="w-4 h-4" />
-                      <span>Rapport Stratégique (C-I)</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={handleGenerateExecutiveReport}
-                  disabled={
-                    selectedKeywords.length === 0 ||
-                    !reportTitle.trim() ||
-                    isGenerating ||
-                    !aiStatusData?.ai_available
-                  }
-                  className="btn w-full flex items-center justify-center space-x-2"
-                  style={{
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    color: 'white'
-                  }}
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Génération...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Target className="w-4 h-4" />
-                      <span>Rapport Exécutif (DG)</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  onClick={handleGenerateReport}
-                  disabled={
-                    selectedKeywords.length === 0 ||
-                    !reportTitle.trim() ||
-                    isGenerating ||
-                    !aiStatusData?.ai_available
-                  }
-                  className="btn btn-primary w-full flex items-center justify-center space-x-2"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>IA en cours...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Brain className="w-4 h-4" />
-                      <span>Générer avec IA</span>
-                    </>
-                  )}
                 </button>
 
                 <button
