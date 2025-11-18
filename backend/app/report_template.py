@@ -224,7 +224,7 @@ def generate_ministerial_report_html(report_data: dict) -> str:
     </p>
     
     <div style="margin-top: 20px; line-height: 1.9;">
-        {self._format_narrative_text(synthese_exec.get('texte', 'Non disponible.'))}
+        {_format_narrative_text(synthese_exec.get('texte', 'Non disponible.'))}
     </div>
     
     <!-- SECTION 2: ANALYSE DE LA SITUATION -->
@@ -232,12 +232,12 @@ def generate_ministerial_report_html(report_data: dict) -> str:
     
     <h3>2.1. Vue d'ensemble</h3>
     <div>
-        {self._format_narrative_text(analyse_sit.get('texte', 'Analyse non disponible.'))}
+        {_format_narrative_text(analyse_sit.get('texte', 'Analyse non disponible.'))}
     </div>
     
     <h3>2.2. Synthèse de l'opinion publique (commentaires internautes)</h3>
     <div>
-        {self._format_narrative_text(comments.get('synthese', 'Aucun commentaire analysé.'))}
+        {_format_narrative_text(comments.get('synthese', 'Aucun commentaire analysé.'))}
     </div>
     
     {'<div class="synthese-box"><strong>⚠️ Appels à l action détectés:</strong> Des commentaires incitent potentiellement à la mobilisation ou à la contestation.</div>' if comments.get('appels_action') == 'OUI' else ''}
@@ -246,7 +246,7 @@ def generate_ministerial_report_html(report_data: dict) -> str:
     <h2 class="page-break">III. ÉVALUATION DES MENACES</h2>
     
     <div>
-        {self._format_narrative_text(eval_menaces.get('texte', 'Évaluation non disponible.'))}
+        {_format_narrative_text(eval_menaces.get('texte', 'Évaluation non disponible.'))}
     </div>
     
     <!-- SECTION 4: ACTIVISTES CRITIQUES -->
@@ -291,17 +291,17 @@ def generate_ministerial_report_html(report_data: dict) -> str:
     
     <h3>6.1. Actions immédiates (0-24h)</h3>
     <div class="recommendation-box">
-        {self._format_narrative_text(reco.get('actions_immediates', 'Aucune action urgente.'))}
+        {_format_narrative_text(reco.get('actions_immediates', 'Aucune action urgente.'))}
     </div>
     
     <h3>6.2. Actions court terme (1-7 jours)</h3>
     <div class="recommendation-box">
-        {self._format_narrative_text(reco.get('actions_court_terme', 'Surveillance continue.'))}
+        {_format_narrative_text(reco.get('actions_court_terme', 'Surveillance continue.'))}
     </div>
     
     <h3>6.3. Actions moyen terme (1 mois)</h3>
     <div class="recommendation-box">
-        {self._format_narrative_text(reco.get('actions_moyen_terme', 'Stratégie de long terme à définir.'))}
+        {_format_narrative_text(reco.get('actions_moyen_terme', 'Stratégie de long terme à définir.'))}
     </div>
     
     <div class="footer">
