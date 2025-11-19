@@ -167,106 +167,76 @@ export default function IntelligentReports() {
   };
 
   const handleGenerateMinisterialReport = async () => {
-  if (selectedKeywords.length === 0 || !reportTitle.trim()) {
-    toast.error('Veuillez sélectionner des mots-clés et saisir un titre');
-    return;
-  }
+    if (selectedKeywords.length === 0 || !reportTitle.trim()) {
+      toast.error('Veuillez sélectionner des mots-clés et saisir un titre');
+      return;
+    }
 
-  setIsGenerating(true);
-  
-  const loadingToast = toast.loading(
-    '📝 Lancement génération rapport ministériel...',
-    { duration: 600000 }
-  );
-
-  try {
-    // ÉTAPE 1: Lancer la génération asynchrone
-    const initResponse = await apiClient.post(
-      '/api/intelligent-reports/generate-ministerial-async',
-      {
-        keyword_ids: selectedKeywords,
-        days: periodDays,
-        report_title: reportTitle,
-        format: format,
-      }
+    setIsGenerating(true);
+    
+    const loadingToast = toast.loading(
+      '📝 Génération rapport ministériel IA en cours...',
+      { duration: 600000 }
     );
-    
-    const { report_id } = initResponse.data;
-    console.log('🆔 Report ID:', report_id);
-    
-    // ÉTAPE 2: Polling pour vérifier le statut
-    let ready = false;
-    let attempts = 0;
-    const maxAttempts = 120; // 10 minutes max (5s * 120)
-    
-    while (!ready && attempts < maxAttempts) {
-      await new Promise(resolve => setTimeout(resolve, 5000)); // Attendre 5 secondes
+
+    try {
+      const response = await apiClient.post(
+        '/api/intelligent-reports/generate-ministerial',
+        {
+          keyword_ids: selectedKeywords,
+          days: periodDays,
+          report_title: reportTitle,
+          format: format,
+        },
+        {
+          responseType: 'blob', // IMPORTANT pour télécharger le fichier
+          timeout: 300000, // 5 minutes
+        }
+      );
       
-      try {
-        const statusResponse = await apiClient.get(
-          `/api/intelligent-reports/status/${report_id}`
-        );
-        
-        const status = statusResponse.data;
-        console.log('📊 Statut:', status);
-        
-        if (status.status === 'ready') {
-          ready = true;
-          toast.loading(`✅ Rapport prêt ! Téléchargement...`, { id: loadingToast });
-        } else if (status.status === 'error') {
-          throw new Error(status.error || 'Erreur de génération');
+      toast.dismiss(loadingToast);
+      
+      // Créer un lien de téléchargement
+      const blob = new Blob([response.data], {
+        type: format === 'pdf' ? 'application/pdf' : 'text/html'
+      });
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `rapport_ministeriel_${new Date().toISOString().slice(0,10)}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('📝 Rapport ministériel généré avec succès !', { duration: 5000 });
+      
+    } catch (error: any) {
+      console.error('❌ Erreur:', error);
+      toast.dismiss(loadingToast);
+      
+      let errorMsg = 'Erreur lors de la génération du rapport';
+      if (error.response?.data) {
+        // Si c'est un blob d'erreur, le convertir en texte
+        if (error.response.data instanceof Blob) {
+          const text = await error.response.data.text();
+          try {
+            const errorData = JSON.parse(text);
+            errorMsg = errorData.detail || errorMsg;
+          } catch {
+            errorMsg = text;
+          }
         } else {
-          const progress = status.progress || 0;
-          toast.loading(
-            `📝 Génération en cours... ${progress}% (${attempts * 5}s)`, 
-            { id: loadingToast }
-          );
+          errorMsg = error.response.data.detail || errorMsg;
         }
-      } catch (statusError: any) {
-        if (statusError.response?.status === 404) {
-          throw new Error('Rapport perdu ou expiré');
-        }
-        console.error('Erreur vérification statut:', statusError);
       }
       
-      attempts++;
+      toast.error(errorMsg, { duration: 7000 });
+    } finally {
+      setIsGenerating(false);
     }
-    
-    if (!ready) {
-      throw new Error('Timeout: Le rapport prend trop de temps à générer (10 min max)');
-    }
-    
-    toast.dismiss(loadingToast);
-    
-    // ÉTAPE 3: Télécharger via GET (pas de problème CORS!)
-    const downloadUrl = `${API_BASE_URL}/api/intelligent-reports/download/${report_id}`;
-    
-    console.log('📥 Téléchargement:', downloadUrl);
-    
-    // Ouvrir dans nouvel onglet (le navigateur gère le téléchargement)
-    window.open(downloadUrl, '_blank');
-    
-    toast.success('📝 Rapport ministériel généré et téléchargé !', { duration: 5000 });
-    
-  } catch (error: any) {
-    console.error('❌ Erreur complète:', error);
-    toast.dismiss(loadingToast);
-    
-    let errorMsg = 'Erreur lors de la génération du rapport ministériel';
-    
-    if (error.message) {
-      errorMsg = error.message;
-    } else if (error.response?.data?.detail) {
-      errorMsg = error.response.data.detail;
-    } else if (error.code === 'ERR_NETWORK') {
-      errorMsg = '🔌 Erreur réseau: Vérifiez que le backend est accessible';
-    }
-    
-    toast.error(errorMsg, { duration: 7000 });
-  } finally {
-    setIsGenerating(false);
-  }
-};
+  };
 
   const getRiskColor = (riskLevel?: string) => {
     switch (riskLevel) {

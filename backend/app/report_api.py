@@ -508,42 +508,44 @@ async def generate_ministerial_report(
         from app.report_template import generate_ministerial_report_html
         html_content = generate_ministerial_report_html(report_data)
         
+        # ✅ CORRECTION CRITIQUE : Utiliser StreamingResponse au lieu de Response
+        from fastapi.responses import StreamingResponse
+        import io
+        
         if request.format == 'pdf':
             from weasyprint import HTML
             pdf_bytes = HTML(string=html_content).write_pdf()
             
-            # CORRECTION: Ajouter explicitement les en-têtes CORS
-            headers = {
-                "Content-Disposition": f"attachment; filename=rapport_ministeriel_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Expose-Headers": "Content-Disposition",
-            }
+            # Créer un stream depuis les bytes
+            pdf_stream = io.BytesIO(pdf_bytes)
             
-            return Response(
-                content=pdf_bytes,
+            filename = f"rapport_ministeriel_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
+            
+            return StreamingResponse(
+                pdf_stream,
                 media_type="application/pdf",
-                headers=headers
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"'
+                }
             )
         else:
-            headers = {
-                "Content-Disposition": f"attachment; filename=rapport_ministeriel_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Expose-Headers": "Content-Disposition",
-            }
+            # HTML
+            html_stream = io.BytesIO(html_content.encode('utf-8'))
             
-            return Response(
-                content=html_content,
+            filename = f"rapport_ministeriel_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.html"
+            
+            return StreamingResponse(
+                html_stream,
                 media_type="text/html",
-                headers=headers
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"'
+                }
             )
             
     except Exception as e:
         logger.error(f"Erreur génération rapport ministériel: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @intelligent_reports_router.get("/examples")
 async def get_ai_analysis_examples():

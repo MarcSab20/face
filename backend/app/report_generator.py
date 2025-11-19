@@ -570,7 +570,8 @@ Réponds en JSON:
                         break
             
             if threats_found:
-                eval_menaces_text += f"Des mentions de termes sensibles ont été détectées ({len(threats_found)} occurrences), incluant des références à {', '.join(set(threats_found)[:3])}. "
+                unique_threats = list(set(threats_found))[:3]
+                eval_menaces_text += f"Des mentions de termes sensibles ont été détectées ({len(threats_found)} occurrences), incluant des références à {', '.join(unique_threats)}. "
             else:
                 eval_menaces_text += f"Aucun terme explicitement menaçant n'a été détecté dans le corpus analysé. "
             
