@@ -78,22 +78,37 @@ class SovereignLLMService:
             models = ollama.list()
             self.ollama_available = True
             
-            # Parser la structure (objet ou dict)
+            # CORRECTION: Parser de manière plus robuste
+            self.available_models = []
+
             if hasattr(models, 'models'):
-                # Cas: objet avec attribut models
-                self.available_models = [m.model for m in models.models]
+                models_list = models.models
+                if isinstance(models_list, (list, tuple)):
+                    self.available_models = [
+                        getattr(m, 'model', str(m)) if hasattr(m, 'model') else str(m)
+                        for m in models_list
+                    ]
             elif isinstance(models, dict) and 'models' in models:
-                # Cas: dictionnaire
-                self.available_models = [m.get('model') or m.get('name') for m in models['models']]
-            else:
-                self.available_models = []
-            
-            # Nettoyer les noms de modèles (enlever :latest)
+                models_list = models['models']
+                if isinstance(models_list, (list, tuple)):
+                    self.available_models = [
+                        m.get('model') or m.get('name') or str(m)
+                        for m in models_list if isinstance(m, dict)
+                    ]
+            elif isinstance(models, (list, tuple)):
+                self.available_models = [str(m) for m in models]
+
+            # CRITIQUE: S'assurer que c'est bien une liste
+            if not isinstance(self.available_models, list):
+                self.available_models = list(self.available_models) if self.available_models else []
+
+            # Nettoyer et dédupliquer
             self.available_models = [
-                m.replace(':latest', '') if ':latest' in m else m 
+                str(m).replace(':latest', '') if isinstance(m, str) else str(m)
                 for m in self.available_models
             ]
-            
+            self.available_models = sorted(list(set(self.available_models)))
+                        
             logger.info(f"Ollama disponible avec {len(self.available_models)} modèles: {', '.join(self.available_models)}")
         except Exception as e:
             logger.warning(f"Ollama non disponible: {e}")
