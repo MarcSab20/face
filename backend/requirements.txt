@@ -138,6 +138,14 @@ matplotlib>=3.7.0
 seaborn>=0.12.0
 plotly>=5.17.0
 
+# IA Externes
+aiohttp>=3.9.0
+nest-asyncio>=1.6.0
+
+# Collecteurs améliorés
+praw>=7.7.0  # Reddit
+beautifulsoup4>=4.12.0
+
 
 
 
