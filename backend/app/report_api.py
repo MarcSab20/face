@@ -231,119 +231,6 @@ async def generate_ministerial_report_async(
         'progress': 0,
         'created_at': datetime.utcnow()
     }
-    
-    async def generate_report():
-        try:
-            logger.info(f"🚀 Début génération rapport {report_id}")
-            
-            # Vérifier les mots-clés
-            keywords = db.query(Keyword).filter(Keyword.id.in_(request.keyword_ids)).all()
-            if not keywords:
-                report_cache[report_id] = {
-                    'status': 'error',
-                    'error': 'Aucun mot-clé trouvé'
-                }
-                return
-            
-            report_cache[report_id]['progress'] = 10
-            
-            # Vérifier les données
-            since_date = datetime.utcnow() - timedelta(days=request.days)
-            mentions_count = db.query(Mention).filter(
-                Mention.keyword_id.in_(request.keyword_ids),
-                Mention.published_at >= since_date
-            ).count()
-            
-            if mentions_count == 0:
-                report_cache[report_id] = {
-                    'status': 'error',
-                    'error': 'Aucune mention trouvée pour cette période'
-                }
-                return
-            
-            report_cache[report_id]['progress'] = 20
-            logger.info(f"📊 {mentions_count} mentions trouvées")
-            
-            # Générer le rapport avec IA
-            from app.report_generator import StrategicReportGeneratorV3
-            generator = StrategicReportGeneratorV3(db)
-            
-            report_cache[report_id]['progress'] = 30
-            
-            report_data = await generator.generate_ministerial_report(
-                keyword_ids=request.keyword_ids,
-                days=request.days,
-                report_title=request.report_title or "Rapport Stratégique Ministériel"
-            )
-            
-            report_cache[report_id]['progress'] = 70
-            logger.info(f"✅ Données du rapport générées")
-            
-            # Générer HTML
-            from app.report_template import generate_ministerial_report_html
-            html_content = generate_ministerial_report_html(report_data)
-            
-            report_cache[report_id]['progress'] = 80
-            
-            # Sauvegarder le fichier
-            output_dir = Path("/mnt/user-data/outputs")
-            output_dir.mkdir(exist_ok=True)
-            
-            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
-            
-            if request.format == 'pdf':
-                from weasyprint import HTML
-                pdf_bytes = HTML(string=html_content).write_pdf()
-                
-                filename = f"rapport_ministeriel_{timestamp}.pdf"
-                filepath = output_dir / filename
-                
-                with open(filepath, 'wb') as f:
-                    f.write(pdf_bytes)
-                
-                content_type = "application/pdf"
-                
-            else:
-                filename = f"rapport_ministeriel_{timestamp}.html"
-                filepath = output_dir / filename
-                
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    f.write(html_content)
-                
-                content_type = "text/html"
-            
-            report_cache[report_id]['progress'] = 100
-            
-            # Mettre à jour le cache avec succès
-            report_cache[report_id] = {
-                'status': 'ready',
-                'filename': filename,
-                'filepath': str(filepath),
-                'content_type': content_type,
-                'generated_at': datetime.utcnow(),
-                'size': filepath.stat().st_size
-            }
-            
-            logger.info(f"✅ Rapport {report_id} généré avec succès: {filepath}")
-            
-        except Exception as e:
-            logger.error(f"❌ Erreur génération rapport {report_id}: {e}", exc_info=True)
-            report_cache[report_id] = {
-                'status': 'error',
-                'error': str(e),
-                'failed_at': datetime.utcnow()
-            }
-    
-    # Lancer en arrière-plan
-    background_tasks.add_task(generate_report)
-    
-    return {
-        "report_id": report_id,
-        "status": "generating",
-        "message": "Génération du rapport lancée",
-        "check_url": f"/api/intelligent-reports/status/{report_id}",
-        "download_url": f"/api/intelligent-reports/download/{report_id}"
-    }
 
 
 @intelligent_reports_router.get("/status/{report_id}")
@@ -596,6 +483,10 @@ async def generate_ministerial_report(
     Rapport V3 - Style Ministériel Narratif
     """
     try:
+        # AJOUT: Logs de débogage
+        logger.info(f"Type de keyword_ids: {type(request.keyword_ids)}")
+        logger.info(f"Contenu keyword_ids: {request.keyword_ids}")
+        
         # Vérifications
         keywords = db.query(Keyword).filter(Keyword.id.in_(request.keyword_ids)).all()
         if not keywords:
