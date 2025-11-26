@@ -1,154 +1,184 @@
-# FastAPI et serveur
+
+# ===== CORE FRAMEWORK =====
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 python-multipart==0.0.6
+pydantic>=2.7.0
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
 
-# Base de données
+# ===== DATABASE =====
 sqlalchemy==2.0.25
 psycopg2-binary==2.9.9
 psycopg[binary]>=3.1.0
 alembic==1.13.1
 
-# Redis pour cache
+# ===== CACHE & ASYNC =====
 redis==5.0.1
-
-# Configuration
-pydantic>=2.7.0
-pydantic-settings==2.1.0
-python-dotenv==1.0.0
-
-# Collecteurs de base
-feedparser==6.0.11
-praw==7.7.1
-beautifulsoup4==4.12.3
-python-dateutil==2.8.2
-
-# HTML parsing et web scraping pour IA
-lxml==5.1.0
-html5lib==1.1
 aiohttp>=3.10
 aiofiles==23.2.0
+httpx==0.26.0
+nest-asyncio>=1.6.0
 
-# ===== INTELLIGENCE ARTIFICIELLE =====
-# Ollama pour modèles LLM locaux
-ollama >=0.1.8
-
-# HuggingFace Transformers (fallback)
+# ===== LOCAL AI (OLLAMA + TRANSFORMERS) =====
+ollama>=0.1.8
 transformers>=4.36.0
-torch>=2.1.0
+torch>=2.1.0  # CPU version (pour GPU: torch>=2.1.0+cu118)
 tokenizers>=0.15.0
 safetensors>=0.4.0
-
-# Accélération GPU (optionnel)
 accelerate>=0.25.0
-
-# Modèles de langue spécialisés
 sentence-transformers>=2.2.2
-spacy>=3.7.0
 
-# Analyse de sentiment avancée
+# ===== SENTIMENT ANALYSIS =====
 vaderSentiment==3.3.2
 textblob==0.17.1
+spacy>=3.7.0
+# Télécharger modèle: python -m spacy download fr_core_news_sm
 
-# ===== WEB SCRAPING ET EXTRACTION =====
-# Parsing HTML avancé
+# ===== ADVANCED NLP =====
+nltk>=3.8.1
+langdetect>=1.0.9
+regex>=2023.10.3
+# Topic Modeling
+bertopic>=0.15.0
+scikit-learn>=1.3.0
+umap-learn>=0.5.4
+hdbscan>=0.8.33
+
+# ===== COLLECTEURS RÉSEAUX SOCIAUX =====
+# Reddit
+praw==7.7.1
+
+# YouTube
+google-api-python-client>=2.100.0
+
+# Twitter/X
+tweepy>=4.14.0
+
+# TikTok (unofficial)
+TikTokApi>=6.0.0
+playwright>=1.40.0  # Requis par TikTokApi
+
+# Mastodon
+Mastodon.py>=1.8.0
+
+# Bluesky
+atproto>=0.0.43
+
+# Telegram
+telethon>=1.34.0
+cryptg>=0.4.0  # Accélération crypto pour Telegram
+
+# ===== COLLECTEURS NEWS =====
+# Google News
+gnews>=0.3.7
+newspaper3k>=0.2.8  # Extraction contenu articles
+
+# NewsAPI (alternative)
+newsapi-python>=0.2.7
+
+# RSS Feeds
+feedparser==6.0.11
+
+# ===== WEB SCRAPING =====
 beautifulsoup4==4.12.3
+lxml==5.1.0
+html5lib==1.1
 selectolax>=0.3.17
 trafilatura>=1.6.4
 
-# Requests asynchrones
-aiohttp>=3.10
-httpx==0.26.0
-
-# Gestion des sessions et cookies
-aiohttp-session>=2.12.0
-
-# User agents rotatifs
+# User Agents & Sessions
 fake-useragent>=1.4.0
+aiohttp-session>=2.12.0
+requests>=2.31.0
 
-# ===== TRAITEMENT DE DONNÉES =====
-# Analyse de données
-pandas>=2.1.0
-numpy>=1.24.0
-
-# Traitement de texte
-nltk>=3.8.1
-regex>=2023.10.3
-
-# Détection de langue
-langdetect>=1.0.9
-
-# ===== UTILITAIRES =====
-pytz>=2024.2
-python-json-logger==2.0.7
-
-# Gestion des erreurs et retry
-tenacity>=8.2.3
-backoff>=2.2.1
-
-# Validation et sécurité
-validators>=0.22.0
-
-# ===== GÉNÉRATION DE RAPPORTS =====
-# PDF - versions spécifiques pour stabilité
+# ===== PDF GENERATION =====
+# WeasyPrint pour rapports PDF professionnels
+weasyprint>=61.0
 cffi>=1.15.0
 cairocffi>=1.6.0
-weasyprint>=61.0
 Pillow>=10.0.0
 tinycss2>=1.2.1
 cssselect2>=0.7.0
 
-# ===== RÉSEAUX SOCIAUX =====
-# Versions compatibles
-Mastodon.py>=1.8.0
-telethon>=1.34.0
-atproto>=0.0.43
-nest-asyncio>=1.6.0
-
-# ===== SURVEILLANCE ET GÉOLOCALISATION =====
-APScheduler>=3.10.4
-geopy>=2.4.0
-pycountry>=23.12.11
-
-# ===== DÉVELOPPEMENT ET TESTS =====
-pytest==7.4.4
-pytest-asyncio==0.23.3
-httpx==0.26.0
-
-# ===== SÉCURITÉ ET PERFORMANCES =====
-# Limitation de taux
-slowapi>=0.1.9
-
-# Surveillance
-prometheus-client>=0.19.0
-
-# Logs structurés
-structlog>=23.2.0
-
-
-# Classification de texte
-scikit-learn>=1.3.0
-
-# Clustering et analyse
-umap-learn>=0.5.4
-hdbscan>=0.8.33
-
-# Graphiques et visualisation
+# ===== VISUALISATION & GRAPHIQUES =====
 matplotlib>=3.7.0
 seaborn>=0.12.0
 plotly>=5.17.0
+# Analyse de réseau
+networkx>=3.1
 
-# IA Externes
-aiohttp>=3.9.0
-nest-asyncio>=1.6.0
+# ===== DATA PROCESSING =====
+pandas>=2.1.0
+numpy>=1.24.0
+python-dateutil==2.8.2
+pytz>=2024.2
 
-# Collecteurs améliorés
-praw>=7.7.0  # Reddit
-beautifulsoup4>=4.12.0
+# ===== GÉOLOCALISATION =====
+geopy>=2.4.0
+pycountry>=23.12.11
 
+# ===== SCHEDULING & BACKGROUND TASKS =====
+APScheduler>=3.10.4
+celery[redis]>=5.3.4  # Pour tâches async robustes
+flower>=2.0.1  # Dashboard Celery
 
+# ===== MONITORING & PERFORMANCE =====
+prometheus-client>=0.19.0
+structlog>=23.2.0
+python-json-logger==2.0.7
 
+# ===== RATE LIMITING & SECURITY =====
+slowapi>=0.1.9
+validators>=0.22.0
 
+# ===== ERROR HANDLING =====
+tenacity>=8.2.3
+backoff>=2.2.1
 
+# ===== TESTING =====
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov>=4.1.0
 
+# ===== EXTERNAL AI APIS (OPTIONAL) =====
+# Ces packages sont légers et permettent d'utiliser des APIs gratuites
+# Gemini, Groq, etc. via requêtes HTTP simples (déjà géré dans le code)
 
+# ===== OPTIONAL: INSTAGRAM =====
+# instagrapi>=4.0.0  # Décommenter si besoin Instagram
+
+# ===== OPTIONAL: FACEBOOK =====
+# facebook-sdk>=3.1.0  # Décommenter si besoin Facebook
+
+# ===== OPTIONAL: GPU ACCELERATION =====
+# Pour utiliser GPU avec PyTorch:
+# 1. Désinstaller torch CPU: pip uninstall torch
+# 2. Installer torch GPU:
+#    - CUDA 11.8: pip install torch==2.1.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html
+#    - CUDA 12.1: pip install torch==2.1.0+cu121 -f https://download.pytorch.org/whl/torch_stable.html
+
+# ===== NOTES D'INSTALLATION =====
+# 1. Installation de base:
+#    pip install -r requirements.txt
+#
+# 2. Post-installation:
+#    - python -m spacy download fr_core_news_sm
+#    - python -m spacy download en_core_web_sm
+#    - python -m nltk.downloader vader_lexicon
+#    - playwright install  # Pour TikTok
+#
+# 3. Ollama (séparé):
+#    - Installer Ollama: https://ollama.ai
+#    - Télécharger modèles:
+#      ollama pull gemma:2b
+#      ollama pull tinyllama
+#      ollama pull mistral:7b
+#
+# 4. Dépendances système (Ubuntu/Debian):
+#    apt-get install -y \
+#      gcc postgresql-client \
+#      libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 \
+#      libffi-dev libcairo2 libcairo2-dev \
+#      fonts-liberation fonts-dejavu-core fontconfig \
+#      libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev
