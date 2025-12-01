@@ -41,9 +41,6 @@ except ImportError:
     GNEWS_ENHANCED_AVAILABLE = False
     logging.warning("Google News Enhanced Collector non disponible")
 
-# Analyse et IA
-from app.sentiment_analyzer import SentimentAnalyzer
-
 try:
     from app.hierarchical_summarizer import HierarchicalSummarizer
     HIERARCHICAL_SUMMARIZER_AVAILABLE = True
@@ -71,13 +68,6 @@ try:
 except ImportError:
     ADVANCED_ANALYZER_AVAILABLE = False
     logging.warning("Advanced Analyzer non disponible")
-
-# Routers API
-from app.api import email_router, influencer_router, geo_router
-from app.report_api import intelligent_reports_router
-
-# Scheduler
-from app.scheduler import init_scheduler, start_scheduler, stop_scheduler
 
 # Modèles Pydantic
 from pydantic import BaseModel
@@ -167,12 +157,6 @@ async def global_exception_handler(request, exc):
         }
     )
 
-
-# ============ INITIALISATION DES SERVICES ============
-
-# Analyseur de sentiment (toujours disponible)
-sentiment_analyzer = SentimentAnalyzer()
-logger.info("✅ Sentiment Analyzer initialisé")
 
 
 # ============ MODÈLES PYDANTIC ============
@@ -901,12 +885,6 @@ async def get_available_sources():
     return {"sources": sources_info}
 
 
-# ============ INCLUSION DES ROUTERS ============
-
-app.include_router(email_router)
-app.include_router(influencer_router)
-app.include_router(geo_router)
-app.include_router(intelligent_reports_router)
 
 
 # ============ POINT D'ENTRÉE ============
