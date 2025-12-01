@@ -1,21 +1,24 @@
+# ===============================================
+# BRAND MONITOR - Dependencies
+# Python 3.11+ requis
+# ===============================================
 
 # ===== CORE FRAMEWORK =====
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
 python-multipart==0.0.6
 pydantic>=2.7.0
-pydantic-settings==2.1.0
+pydantic-settings==2.2.0
 python-dotenv==1.0.0
 
 # ===== DATABASE =====
 sqlalchemy==2.0.25
 psycopg2-binary==2.9.9
-psycopg[binary]>=3.1.0
 alembic==1.13.1
 
 # ===== CACHE & ASYNC =====
 redis==5.0.1
-aiohttp>=3.10
+aiohttp>=3.10.0
 aiofiles==23.2.0
 httpx==0.26.0
 nest-asyncio>=1.6.0
@@ -23,7 +26,7 @@ nest-asyncio>=1.6.0
 # ===== LOCAL AI (OLLAMA + TRANSFORMERS) =====
 ollama>=0.1.8
 transformers>=4.36.0
-torch>=2.1.0  # CPU version (pour GPU: torch>=2.1.0+cu118)
+torch>=2.1.0
 tokenizers>=0.15.0
 safetensors>=0.4.0
 accelerate>=0.25.0
@@ -33,12 +36,12 @@ sentence-transformers>=2.2.2
 vaderSentiment==3.3.2
 textblob==0.17.1
 spacy>=3.7.0
-# Télécharger modèle: python -m spacy download fr_core_news_sm
 
 # ===== ADVANCED NLP =====
 nltk>=3.8.1
 langdetect>=1.0.9
 regex>=2023.10.3
+
 # Topic Modeling
 bertopic>=0.15.0
 scikit-learn>=1.3.0
@@ -46,18 +49,22 @@ umap-learn>=0.5.4
 hdbscan>=0.8.33
 
 # ===== COLLECTEURS RÉSEAUX SOCIAUX =====
+
 # Reddit
 praw==7.7.1
 
 # YouTube
 google-api-python-client>=2.100.0
+google-auth>=2.25.0
+google-auth-oauthlib>=1.2.0
+google-auth-httplib2>=0.2.0
 
-# Twitter/X
-tweepy>=4.14.0
+# Twitter/X (Optionnel)
+# tweepy>=4.14.0
 
-# TikTok (unofficial)
-TikTokApi>=6.0.0
-playwright>=1.40.0  # Requis par TikTokApi
+# TikTok (unofficial - optionnel)
+# TikTokApi>=6.0.0
+# playwright>=1.40.0
 
 # Mastodon
 Mastodon.py>=1.8.0
@@ -67,12 +74,13 @@ atproto>=0.0.43
 
 # Telegram
 telethon>=1.34.0
-cryptg>=0.4.0  # Accélération crypto pour Telegram
+cryptg>=0.4.0
 
 # ===== COLLECTEURS NEWS =====
+
 # Google News
 gnews>=0.3.7
-newspaper3k>=0.2.8  # Extraction contenu articles
+newspaper3k>=0.2.8
 
 # NewsAPI (alternative)
 newsapi-python>=0.2.7
@@ -89,11 +97,9 @@ trafilatura>=1.6.4
 
 # User Agents & Sessions
 fake-useragent>=1.4.0
-aiohttp-session>=2.12.0
 requests>=2.31.0
 
 # ===== PDF GENERATION =====
-# WeasyPrint pour rapports PDF professionnels
 weasyprint>=61.0
 cffi>=1.15.0
 cairocffi>=1.6.0
@@ -101,10 +107,14 @@ Pillow>=10.0.0
 tinycss2>=1.2.1
 cssselect2>=0.7.0
 
+# Alternative: ReportLab (plus léger)
+reportlab>=4.0.0
+
 # ===== VISUALISATION & GRAPHIQUES =====
 matplotlib>=3.7.0
 seaborn>=0.12.0
 plotly>=5.17.0
+
 # Analyse de réseau
 networkx>=3.1
 
@@ -120,10 +130,15 @@ pycountry>=23.12.11
 
 # ===== SCHEDULING & BACKGROUND TASKS =====
 APScheduler>=3.10.4
-celery[redis]>=5.3.4  # Pour tâches async robustes
-flower>=2.0.1  # Dashboard Celery
 
-# ===== MONITORING & PERFORMANCE =====
+# Celery (optionnel - pour tâches async robustes)
+# celery[redis]>=5.3.4
+# flower>=2.0.1
+
+# ===== EMAIL =====
+# Utilise SMTP standard Python (pas de dépendance externe)
+
+# ===== MONITORING & LOGGING =====
 prometheus-client>=0.19.0
 structlog>=23.2.0
 python-json-logger==2.0.7
@@ -141,44 +156,61 @@ pytest==7.4.4
 pytest-asyncio==0.23.3
 pytest-cov>=4.1.0
 
-# ===== EXTERNAL AI APIS (OPTIONAL) =====
-# Ces packages sont légers et permettent d'utiliser des APIs gratuites
-# Gemini, Groq, etc. via requêtes HTTP simples (déjà géré dans le code)
+# ===== UTILITIES =====
+python-slugify>=8.0.0
+tqdm>=4.66.0
 
-# ===== OPTIONAL: INSTAGRAM =====
-# instagrapi>=4.0.0  # Décommenter si besoin Instagram
-
-# ===== OPTIONAL: FACEBOOK =====
-# facebook-sdk>=3.1.0  # Décommenter si besoin Facebook
-
-# ===== OPTIONAL: GPU ACCELERATION =====
+# ===============================================
+# POST-INSTALLATION STEPS
+# ===============================================
+#
+# 1. Modèles spaCy:
+#    python -m spacy download fr_core_news_sm
+#    python -m spacy download en_core_web_sm
+#
+# 2. Données NLTK:
+#    python -c "import nltk; nltk.download('vader_lexicon')"
+#    python -c "import nltk; nltk.download('punkt')"
+#    python -c "import nltk; nltk.download('stopwords')"
+#
+# 3. Playwright (si TikTok activé):
+#    playwright install
+#
+# 4. Ollama (séparé):
+#    # Installer depuis: https://ollama.ai
+#    ollama pull gemma:2b
+#    ollama pull tinyllama
+#
+# ===============================================
+# NOTES D'INSTALLATION
+# ===============================================
+#
+# Installation complète:
+#   pip install -r requirements.txt
+#   python setup.py
+#
+# Installation minimale (sans IA avancée):
+#   pip install -r requirements.txt --no-deps torch transformers
+#
+# Dépendances système (Ubuntu/Debian):
+#   apt-get update && apt-get install -y \
+#     gcc postgresql-client \
+#     libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 \
+#     libffi-dev libcairo2 libcairo2-dev \
+#     fonts-liberation fonts-dejavu-core fontconfig \
+#     libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev
+#
+# ===============================================
+# OPTIONAL: GPU ACCELERATION
+# ===============================================
+#
 # Pour utiliser GPU avec PyTorch:
-# 1. Désinstaller torch CPU: pip uninstall torch
-# 2. Installer torch GPU:
-#    - CUDA 11.8: pip install torch==2.1.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html
-#    - CUDA 12.1: pip install torch==2.1.0+cu121 -f https://download.pytorch.org/whl/torch_stable.html
-
-# ===== NOTES D'INSTALLATION =====
-# 1. Installation de base:
-#    pip install -r requirements.txt
+# 1. Désinstaller: pip uninstall torch
+# 2. Installer version GPU:
+#    CUDA 11.8:
+#    pip install torch==2.1.0+cu118 -f https://download.pytorch.org/whl/torch_stable.html
+#    
+#    CUDA 12.1:
+#    pip install torch==2.1.0+cu121 -f https://download.pytorch.org/whl/torch_stable.html
 #
-# 2. Post-installation:
-#    - python -m spacy download fr_core_news_sm
-#    - python -m spacy download en_core_web_sm
-#    - python -m nltk.downloader vader_lexicon
-#    - playwright install  # Pour TikTok
-#
-# 3. Ollama (séparé):
-#    - Installer Ollama: https://ollama.ai
-#    - Télécharger modèles:
-#      ollama pull gemma:2b
-#      ollama pull tinyllama
-#      ollama pull mistral:7b
-#
-# 4. Dépendances système (Ubuntu/Debian):
-#    apt-get install -y \
-#      gcc postgresql-client \
-#      libpango-1.0-0 libpangoft2-1.0-0 libgdk-pixbuf-2.0-0 \
-#      libffi-dev libcairo2 libcairo2-dev \
-#      fonts-liberation fonts-dejavu-core fontconfig \
-#      libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev
+# ===============================================

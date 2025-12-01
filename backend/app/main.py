@@ -1,72 +1,186 @@
-from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Query
+"""
+Brand Monitor - Main Application
+Système de surveillance et d'analyse d'opinion publique
+Version 2.0 - Intégration complète
+"""
+
+from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Query, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from typing import List, Optional
 from datetime import datetime, timedelta
 import logging
 import json
+import asyncio
 
-from app.config import settings
+# Configuration et base de données
+from app.config import settings, validate_and_log_config
 from app.database import get_db, init_db
 from app.models import Keyword, Mention, CollectionLog
-from app.collectors.rss_collector import RSSCollector
-from app.collectors.reddit_collector import RedditCollector
-from app.collectors.youtube_collector import YouTubeCollector
-from app.collectors.tiktok_collector import TikTokCollector
-from app.collectors.google_search_collector import GoogleSearchCollector
-from app.collectors.google_alerts_collector import GoogleAlertsCollector
+
+try:
+    from app.collectors.youtube_collector import YouTubeCollectorEnhanced
+    YOUTUBE_ENHANCED_AVAILABLE = True
+except ImportError:
+    YOUTUBE_ENHANCED_AVAILABLE = False
+    logging.warning("YouTube Enhanced Collector non disponible")
+
+try:
+    from app.collectors.reddit_collector import RedditCollectorEnhanced
+    REDDIT_ENHANCED_AVAILABLE = True
+except ImportError:
+    REDDIT_ENHANCED_AVAILABLE = False
+    logging.warning("Reddit Enhanced Collector non disponible")
+
+try:
+    from app.collectors.google_news_collector import GoogleNewsCollectorEnhanced
+    GNEWS_ENHANCED_AVAILABLE = True
+except ImportError:
+    GNEWS_ENHANCED_AVAILABLE = False
+    logging.warning("Google News Enhanced Collector non disponible")
+
+# Analyse et IA
 from app.sentiment_analyzer import SentimentAnalyzer
-from app.collectors.mastodon_collector import MastodonCollector
-from app.collectors.bluesky_collector import BlueskyCollector
-from app.collectors.telegram_collector import TelegramCollector
-from pydantic import BaseModel
+
+try:
+    from app.hierarchical_summarizer import HierarchicalSummarizer
+    HIERARCHICAL_SUMMARIZER_AVAILABLE = True
+except ImportError:
+    HIERARCHICAL_SUMMARIZER_AVAILABLE = False
+    logging.warning("Hierarchical Summarizer non disponible")
+
+try:
+    from app.external_ai_service import ExternalAIService
+    EXTERNAL_AI_AVAILABLE = True
+except ImportError:
+    EXTERNAL_AI_AVAILABLE = False
+    logging.warning("External AI Service non disponible")
+
+try:
+    from app.influencer_manager import AdvancedInfluencerAnalyzer
+    INFLUENCER_MANAGER_AVAILABLE = True
+except ImportError:
+    INFLUENCER_MANAGER_AVAILABLE = False
+    logging.warning("Advanced Influencer Manager non disponible")
+
+try:
+    from app.advanced_analyzer import AdvancedAnalyzer
+    ADVANCED_ANALYZER_AVAILABLE = True
+except ImportError:
+    ADVANCED_ANALYZER_AVAILABLE = False
+    logging.warning("Advanced Analyzer non disponible")
+
+# Routers API
 from app.api import email_router, influencer_router, geo_router
 from app.report_api import intelligent_reports_router
-from app.scheduler import init_scheduler, start_scheduler
-from app.scheduler import stop_scheduler
+
+# Scheduler
+from app.scheduler import init_scheduler, start_scheduler, stop_scheduler
+
+# Modèles Pydantic
+from pydantic import BaseModel
 
 # Configuration du logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, settings.LOG_LEVEL),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Initialiser l'analyseur de sentiment
-sentiment_analyzer = SentimentAnalyzer()
+# ============ INITIALISATION FASTAPI ============
 
-# Initialisation FastAPI
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Système de surveillance des mentions en ligne avec analyse de sentiment"
+    description="Système professionnel de surveillance et d'analyse d'opinion publique",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-# CORS
+# ============ CORS ============
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # En production, spécifier les domaines
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Content-Disposition", "Content-Type", "Content-Length"],  # IMPORTANT
-    max_age=3600,  # Cache preflight pendant 1h
+    expose_headers=["Content-Disposition", "Content-Type", "Content-Length"],
+    max_age=3600,
 )
 
-# Initialiser la base de données au démarrage
+# ============ ÉVÉNEMENTS STARTUP/SHUTDOWN ============
+
 @app.on_event("startup")
 async def startup_event():
-    init_db()
-    init_scheduler()
-    start_scheduler()
-    logger.info("Application démarrée et base de données initialisée")
+    """Initialisation au démarrage"""
+    try:
+        # Valider la configuration
+        validate_and_log_config()
+        
+        # Initialiser la base de données
+        init_db()
+        logger.info("✅ Base de données initialisée")
+        
+        # Initialiser le scheduler
+        init_scheduler()
+        start_scheduler()
+        logger.info("✅ Scheduler initialisé")
+        
+        # Vérifier les services IA
+        ai_status = settings.get_ai_services_status()
+        logger.info(f"✅ Services IA: {json.dumps(ai_status, indent=2)}")
+        
+        logger.info("=" * 60)
+        logger.info("🚀 APPLICATION DÉMARRÉE AVEC SUCCÈS")
+        logger.info("=" * 60)
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur au démarrage: {e}")
+        raise
 
-# ============ Modèles Pydantic ============
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Nettoyage à l'arrêt"""
+    logger.info("Arrêt de l'application...")
+    try:
+        stop_scheduler()
+        logger.info("✅ Scheduler arrêté")
+    except Exception as e:
+        logger.error(f"Erreur arrêt: {e}")
+
+
+# ============ GESTIONNAIRE D'ERREURS GLOBAL ============
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    """Gestionnaire d'erreurs global"""
+    logger.error(f"Erreur non gérée: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "error": "Erreur interne du serveur",
+            "detail": str(exc) if settings.DEBUG else "Une erreur est survenue"
+        }
+    )
+
+
+# ============ INITIALISATION DES SERVICES ============
+
+# Analyseur de sentiment (toujours disponible)
+sentiment_analyzer = SentimentAnalyzer()
+logger.info("✅ Sentiment Analyzer initialisé")
+
+
+# ============ MODÈLES PYDANTIC ============
 
 class KeywordCreate(BaseModel):
     keyword: str
     sources: List[str] = ["rss", "reddit", "youtube", "google_search"]
+
 
 class KeywordResponse(BaseModel):
     id: int
@@ -78,6 +192,7 @@ class KeywordResponse(BaseModel):
     
     class Config:
         from_attributes = True
+
 
 class MentionResponse(BaseModel):
     id: int
@@ -95,9 +210,11 @@ class MentionResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class CollectionRequest(BaseModel):
     keyword_id: Optional[int] = None
     sources: Optional[List[str]] = None
+
 
 class StatsResponse(BaseModel):
     total_keywords: int
@@ -107,6 +224,7 @@ class StatsResponse(BaseModel):
     top_keywords: List[dict]
     sentiment_distribution: Optional[dict] = None
 
+
 class AdvancedStatsResponse(BaseModel):
     timeline: List[dict]
     sentiment_by_source: dict
@@ -114,29 +232,74 @@ class AdvancedStatsResponse(BaseModel):
     hourly_distribution: List[dict]
     daily_distribution: List[dict]
 
-# ============ Routes API ============
 
-app.include_router(email_router)
-app.include_router(influencer_router)
-app.include_router(geo_router)
-app.include_router(intelligent_reports_router)
+class SystemStatusResponse(BaseModel):
+    status: str
+    version: str
+    collectors_available: List[str]
+    ai_services: dict
+    features: dict
+
+
+# ============ ROUTES API - RACINE ============
 
 @app.get("/")
 async def root():
-    """Endpoint racine"""
+    """Endpoint racine avec info système"""
     return {
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "status": "running",
-        "features": ["sentiment_analysis", "advanced_stats", "filters"]
+        "documentation": "/docs",
+        "health_check": "/health"
     }
+
 
 @app.get("/health")
 async def health_check():
-    """Health check"""
-    return {"status": "healthy", "timestamp": datetime.utcnow()}
+    """Health check détaillé"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "version": settings.APP_VERSION,
+        "database": "connected",  # TODO: vérifier vraiment la DB
+        "collectors": len(settings.get_available_collectors()),
+        "ai_services": settings.get_ai_services_status()
+    }
 
-# ===== Gestion des mots-clés =====
+
+@app.get("/system/status", response_model=SystemStatusResponse)
+async def get_system_status():
+    """Obtenir le statut complet du système"""
+    return SystemStatusResponse(
+        status="operational",
+        version=settings.APP_VERSION,
+        collectors_available=settings.get_available_collectors(),
+        ai_services=settings.get_ai_services_status(),
+        features={
+            "email_alerts": settings.email_enabled,
+            "network_analysis": settings.ENABLE_NETWORK_ANALYSIS,
+            "anomaly_detection": settings.ENABLE_ANOMALY_DETECTION,
+            "topic_modeling": settings.ENABLE_TOPIC_MODELING,
+            "hierarchical_summarizer": HIERARCHICAL_SUMMARIZER_AVAILABLE,
+            "external_ai": EXTERNAL_AI_AVAILABLE,
+            "influencer_manager": INFLUENCER_MANAGER_AVAILABLE
+        }
+    )
+
+
+@app.get("/system/config")
+async def get_system_config():
+    """Obtenir la configuration système (admin only - à sécuriser)"""
+    if not settings.DEBUG:
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé en mode production"
+        )
+    return settings.get_config_summary()
+
+
+# ============ ROUTES API - KEYWORDS ============
 
 @app.post("/api/keywords", response_model=KeywordResponse)
 async def create_keyword(keyword_data: KeywordCreate, db: Session = Depends(get_db)):
@@ -145,6 +308,16 @@ async def create_keyword(keyword_data: KeywordCreate, db: Session = Depends(get_
     existing = db.query(Keyword).filter(Keyword.keyword == keyword_data.keyword).first()
     if existing:
         raise HTTPException(status_code=400, detail="Ce mot-clé existe déjà")
+    
+    # Valider les sources
+    available_sources = settings.get_available_collectors()
+    invalid_sources = [s for s in keyword_data.sources if s not in available_sources]
+    
+    if invalid_sources:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Sources invalides: {', '.join(invalid_sources)}"
+        )
     
     keyword = Keyword(
         keyword=keyword_data.keyword,
@@ -159,6 +332,7 @@ async def create_keyword(keyword_data: KeywordCreate, db: Session = Depends(get_
     logger.info(f"Mot-clé créé: {keyword_data.keyword}")
     return keyword
 
+
 @app.get("/api/keywords", response_model=List[KeywordResponse])
 async def get_keywords(active_only: bool = True, db: Session = Depends(get_db)):
     """Obtenir la liste des mots-clés"""
@@ -170,6 +344,7 @@ async def get_keywords(active_only: bool = True, db: Session = Depends(get_db)):
     keywords = query.all()
     return keywords
 
+
 @app.get("/api/keywords/{keyword_id}", response_model=KeywordResponse)
 async def get_keyword(keyword_id: int, db: Session = Depends(get_db)):
     """Obtenir un mot-clé spécifique"""
@@ -179,6 +354,7 @@ async def get_keyword(keyword_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Mot-clé non trouvé")
     
     return keyword
+
 
 @app.delete("/api/keywords/{keyword_id}")
 async def delete_keyword(keyword_id: int, db: Session = Depends(get_db)):
@@ -194,7 +370,8 @@ async def delete_keyword(keyword_id: int, db: Session = Depends(get_db)):
     logger.info(f"Mot-clé supprimé: {keyword.keyword}")
     return {"message": "Mot-clé supprimé avec succès"}
 
-# ===== Analyse de sentiment =====
+
+# ============ ROUTES API - ANALYSE SENTIMENT ============
 
 @app.post("/api/analyze-sentiment/{mention_id}")
 async def analyze_mention_sentiment(mention_id: int, db: Session = Depends(get_db)):
@@ -219,6 +396,7 @@ async def analyze_mention_sentiment(mention_id: int, db: Session = Depends(get_d
         "details": analysis
     }
 
+
 @app.post("/api/analyze-all-sentiments")
 async def analyze_all_sentiments(
     background_tasks: BackgroundTasks,
@@ -239,6 +417,7 @@ async def analyze_all_sentiments(
         "count": len(mentions_without_sentiment)
     }
 
+
 def process_sentiment_analysis(mentions: List[Mention], db: Session):
     """Traiter l'analyse de sentiment en arrière-plan"""
     for mention in mentions:
@@ -252,7 +431,8 @@ def process_sentiment_analysis(mentions: List[Mention], db: Session):
     
     logger.info(f"Analyse de sentiment terminée pour {len(mentions)} mentions")
 
-# ===== Collecte de données =====
+
+# ============ ROUTES API - COLLECTE ============
 
 @app.post("/api/collect")
 async def collect_mentions(
@@ -280,21 +460,48 @@ async def collect_mentions(
         "status": "processing"
     }
 
+
 async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], db: Session):
     """Exécuter la collecte pour les mots-clés donnés"""
     
+    # Initialiser les collecteurs standards
     collectors = {
-        'rss': RSSCollector(),
-        'reddit': RedditCollector(),
-        'youtube': YouTubeCollector(),
-        'tiktok': TikTokCollector(),
-        'google_search': GoogleSearchCollector(),
-        'google_alerts': GoogleAlertsCollector(),
-        'mastodon': MastodonCollector(),
-        'bluesky': BlueskyCollector(),
-        'telegram': TelegramCollector()
+        'rss': RSSCollector()
     }
     
+    # Ajouter collecteurs selon configuration
+    if settings.reddit_enabled:
+        if REDDIT_ENHANCED_AVAILABLE:
+            collectors['reddit'] = RedditCollectorEnhanced(
+                client_id=settings.REDDIT_CLIENT_ID,
+                client_secret=settings.REDDIT_CLIENT_SECRET,
+                user_agent=settings.REDDIT_USER_AGENT
+            )
+        else:
+            collectors['reddit'] = RedditCollector()
+    
+    if settings.youtube_enabled:
+        if YOUTUBE_ENHANCED_AVAILABLE:
+            collectors['youtube'] = YouTubeCollectorEnhanced(api_key=settings.YOUTUBE_API_KEY)
+        else:
+            collectors['youtube'] = YouTubeCollector()
+    
+    if settings.gnews_enabled and GNEWS_ENHANCED_AVAILABLE:
+        collectors['google_news'] = GoogleNewsCollectorEnhanced(api_key=settings.GNEWS_API_KEY)
+    
+    if settings.google_search_enabled:
+        collectors['google_search'] = GoogleSearchCollector()
+    
+    if settings.mastodon_enabled:
+        collectors['mastodon'] = MastodonCollector()
+    
+    if settings.bluesky_enabled:
+        collectors['bluesky'] = BlueskyCollector()
+    
+    if settings.telegram_enabled:
+        collectors['telegram'] = TelegramCollector()
+    
+    # Collecte pour chaque keyword
     for keyword in keywords:
         keyword_sources = sources or json.loads(keyword.sources)
         
@@ -383,7 +590,8 @@ async def run_collection(keywords: List[Keyword], sources: Optional[List[str]], 
         keyword.last_collected = datetime.utcnow()
         db.commit()
 
-# ===== Mentions avec filtres avancés =====
+
+# ============ ROUTES API - MENTIONS ============
 
 @app.get("/api/mentions", response_model=List[MentionResponse])
 async def get_mentions(
@@ -439,6 +647,7 @@ async def get_mentions(
     
     return mentions
 
+
 @app.get("/api/mentions/{mention_id}", response_model=MentionResponse)
 async def get_mention(mention_id: int, db: Session = Depends(get_db)):
     """Obtenir une mention spécifique"""
@@ -449,7 +658,8 @@ async def get_mention(mention_id: int, db: Session = Depends(get_db)):
     
     return mention
 
-# ===== Statistiques de base =====
+
+# ============ ROUTES API - STATISTIQUES ============
 
 @app.get("/api/stats", response_model=StatsResponse)
 async def get_stats(db: Session = Depends(get_db)):
@@ -501,7 +711,6 @@ async def get_stats(db: Session = Depends(get_db)):
         sentiment_distribution=sentiment_dist
     )
 
-# ===== Statistiques avancées =====
 
 @app.get("/api/stats/advanced", response_model=AdvancedStatsResponse)
 async def get_advanced_stats(
@@ -601,79 +810,113 @@ async def get_advanced_stats(
         daily_distribution=daily_distribution
     )
 
-# ===== Configuration =====
+
+# ============ ROUTES API - SOURCES ============
 
 @app.get("/api/sources")
 async def get_available_sources():
     """Obtenir la liste des sources disponibles"""
-    return {
-        "sources": [
-            {
-                "id": "rss",
-                "name": "RSS Feeds",
-                "description": "Flux RSS d'actualités",
-                "free": True,
-                "limit": "Illimité"
-            },
-            {
-                "id": "reddit",
-                "name": "Reddit",
-                "description": "Posts et commentaires Reddit",
-                "free": True,
-                "limit": "100 requêtes/minute"
-            },
-            {
-                "id": "youtube",
-                "name": "YouTube",
-                "description": "Vidéos YouTube",
-                "free": True,
-                "limit": "10,000 requêtes/jour"
-            },
-            {
-                "id": "tiktok",
-                "name": "TikTok",
-                "description": "Vidéos TikTok",
-                "free": True,
-                "limit": "Limité (scraping)"
-            },
-            {
-                "id": "google_search",
-                "name": "Google Search",
-                "description": "Recherche Google Custom",
-                "free": True,
-                "limit": "100 requêtes/jour"
-            },
-            {
-                "id": "google_alerts",
-                "name": "Google Alerts",
-                "description": "Alertes Google par email",
-                "free": True,
-                "limit": "Illimité"
-            },
-            {
-                "id": "mastodon",
-                "name": "Mastodon",
-                "description": "Réseau social décentralisé",
-                "free": True,
-                "limit": "Illimité"
-            },
-            {
-                "id": "bluesky",
-                "name": "Bluesky",
-                "description": "Nouveau réseau social",
-                "free": True,
-                "limit": "Illimité"
-            },
-            {
-                "id": "telegram",
-                "name": "Telegram",
-                "description": "Messages de canaux publics",
-                "free": True,
-                "limit": "Illimité"
-            }
-        ]
+    
+    available_collectors = settings.get_available_collectors()
+    
+    sources_info = []
+    
+    # Définir les infos pour chaque source
+    all_sources = {
+        "rss": {
+            "name": "RSS Feeds",
+            "description": "Flux RSS d'actualités",
+            "free": True,
+            "limit": "Illimité",
+            "enabled": True
+        },
+        "reddit": {
+            "name": "Reddit",
+            "description": "Posts et commentaires Reddit",
+            "free": True,
+            "limit": "100 requêtes/minute",
+            "enabled": settings.reddit_enabled,
+            "enhanced": REDDIT_ENHANCED_AVAILABLE
+        },
+        "youtube": {
+            "name": "YouTube",
+            "description": "Vidéos et commentaires YouTube",
+            "free": True,
+            "limit": "10,000 unités/jour",
+            "enabled": settings.youtube_enabled,
+            "enhanced": YOUTUBE_ENHANCED_AVAILABLE
+        },
+        "google_news": {
+            "name": "Google News",
+            "description": "Articles de presse",
+            "free": True,
+            "limit": "100 requêtes/jour",
+            "enabled": settings.gnews_enabled,
+            "enhanced": GNEWS_ENHANCED_AVAILABLE
+        },
+        "google_search": {
+            "name": "Google Search",
+            "description": "Recherche Google Custom",
+            "free": True,
+            "limit": "100 requêtes/jour",
+            "enabled": settings.google_search_enabled
+        },
+        "telegram": {
+            "name": "Telegram",
+            "description": "Messages de canaux publics",
+            "free": True,
+            "limit": "Illimité",
+            "enabled": settings.telegram_enabled
+        },
+        "mastodon": {
+            "name": "Mastodon",
+            "description": "Réseau social décentralisé",
+            "free": True,
+            "limit": "Illimité",
+            "enabled": settings.mastodon_enabled
+        },
+        "bluesky": {
+            "name": "Bluesky",
+            "description": "Nouveau réseau social",
+            "free": True,
+            "limit": "Illimité",
+            "enabled": settings.bluesky_enabled
+        },
+        "tiktok": {
+            "name": "TikTok",
+            "description": "Vidéos TikTok",
+            "free": True,
+            "limit": "Limité (scraping)",
+            "enabled": settings.tiktok_enabled
+        }
     }
+    
+    for source_id in available_collectors:
+        if source_id in all_sources:
+            sources_info.append({
+                "id": source_id,
+                **all_sources[source_id]
+            })
+    
+    return {"sources": sources_info}
+
+
+# ============ INCLUSION DES ROUTERS ============
+
+app.include_router(email_router)
+app.include_router(influencer_router)
+app.include_router(geo_router)
+app.include_router(intelligent_reports_router)
+
+
+# ============ POINT D'ENTRÉE ============
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        workers=settings.WORKERS if not settings.DEBUG else 1,
+        log_level=settings.LOG_LEVEL.lower()
+    )
