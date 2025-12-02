@@ -1,7 +1,7 @@
 """
 Brand Monitor - Main Application
 Système de surveillance et d'analyse d'opinion publique
-Version 2.0 - Intégration complète
+Version 2.0 - Intégration complète avec routes avancées et IA unifié
 """
 
 from fastapi import FastAPI, Depends, HTTPException, BackgroundTasks, Query, status
@@ -41,33 +41,21 @@ except ImportError:
     GNEWS_ENHANCED_AVAILABLE = False
     logging.warning("Google News Enhanced Collector non disponible")
 
+# Import du router des routes avancées
 try:
-    from app.hierarchical_summarizer import HierarchicalSummarizer
-    HIERARCHICAL_SUMMARIZER_AVAILABLE = True
+    from app.routes_advanced import get_advanced_router
+    ROUTES_ADVANCED_AVAILABLE = True
 except ImportError:
-    HIERARCHICAL_SUMMARIZER_AVAILABLE = False
-    logging.warning("Hierarchical Summarizer non disponible")
+    ROUTES_ADVANCED_AVAILABLE = False
+    logging.warning("Routes avancées non disponibles")
 
+# Import du service IA unifié
 try:
-    from app.external_ai_service import ExternalAIService
-    EXTERNAL_AI_AVAILABLE = True
+    from app.unified_ai_service import UnifiedAIService
+    UNIFIED_AI_AVAILABLE = True
 except ImportError:
-    EXTERNAL_AI_AVAILABLE = False
-    logging.warning("External AI Service non disponible")
-
-try:
-    from app.influencer_manager import AdvancedInfluencerAnalyzer
-    INFLUENCER_MANAGER_AVAILABLE = True
-except ImportError:
-    INFLUENCER_MANAGER_AVAILABLE = False
-    logging.warning("Advanced Influencer Manager non disponible")
-
-try:
-    from app.advanced_analyzer import AdvancedAnalyzer
-    ADVANCED_ANALYZER_AVAILABLE = True
-except ImportError:
-    ADVANCED_ANALYZER_AVAILABLE = False
-    logging.warning("Advanced Analyzer non disponible")
+    UNIFIED_AI_AVAILABLE = False
+    logging.warning("Service IA unifié non disponible")
 
 # Modèles Pydantic
 from pydantic import BaseModel
@@ -82,6 +70,7 @@ from app.collectors.collectors_stubs import YouTubeCollector
 from app.collectors.collectors_stubs import RedditCollector
 
 sentiment_analyzer = SentimentAnalyzer()
+
 # Configuration du logging
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -130,8 +119,25 @@ async def startup_event():
         logger.info("✅ Scheduler initialisé")
         
         # Vérifier les services IA
-        ai_status = settings.get_ai_services_status()
-        logger.info(f"✅ Services IA: {json.dumps(ai_status, indent=2)}")
+        if UNIFIED_AI_AVAILABLE:
+            ai_service = UnifiedAIService(
+                gemini_api_key=settings.GEMINI_API_KEY,
+                groq_api_key=settings.GROQ_API_KEY,
+                ollama_host=settings.OLLAMA_HOST,
+                ollama_model=settings.OLLAMA_DEFAULT_MODEL
+            )
+            available_services = ai_service.get_available_services()
+            logger.info(f"✅ Services IA disponibles: {[s['label'] for s in available_services]}")
+        else:
+            logger.warning("⚠️ Service IA unifié non disponible")
+        
+        # Monter les routes avancées si disponibles
+        if ROUTES_ADVANCED_AVAILABLE:
+            advanced_router = get_advanced_router()
+            app.include_router(advanced_router)
+            logger.info("✅ Routes avancées montées")
+        else:
+            logger.warning("⚠️ Routes avancées non disponibles")
         
         logger.info("=" * 60)
         logger.info("🚀 APPLICATION DÉMARRÉE AVEC SUCCÈS")
@@ -166,7 +172,6 @@ async def global_exception_handler(request, exc):
             "detail": str(exc) if settings.DEBUG else "Une erreur est survenue"
         }
     )
-
 
 
 # ============ MODÈLES PYDANTIC ============
@@ -245,39 +250,93 @@ async def root():
         "version": settings.APP_VERSION,
         "status": "running",
         "documentation": "/docs",
-        "health_check": "/health"
+        "health_check": "/health",
+        "features": {
+            "advanced_routes": ROUTES_ADVANCED_AVAILABLE,
+            "unified_ai": UNIFIED_AI_AVAILABLE,
+            "youtube_enhanced": YOUTUBE_ENHANCED_AVAILABLE,
+            "reddit_enhanced": REDDIT_ENHANCED_AVAILABLE,
+            "google_news": GNEWS_ENHANCED_AVAILABLE
+        }
     }
 
 
 @app.get("/health")
 async def health_check():
     """Health check détaillé"""
-    return {
+    health_status = {
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "version": settings.APP_VERSION,
-        "database": "connected",  # TODO: vérifier vraiment la DB
+        "database": "connected",
         "collectors": len(settings.get_available_collectors()),
-        "ai_services": settings.get_ai_services_status()
+        "features": {
+            "advanced_routes": ROUTES_ADVANCED_AVAILABLE,
+            "unified_ai": UNIFIED_AI_AVAILABLE,
+            "youtube_enhanced": YOUTUBE_ENHANCED_AVAILABLE,
+            "reddit_enhanced": REDDIT_ENHANCED_AVAILABLE,
+            "google_news": GNEWS_ENHANCED_AVAILABLE
+        }
     }
+    
+    # Tester le service IA unifié si disponible
+    if UNIFIED_AI_AVAILABLE:
+        try:
+            ai_service = UnifiedAIService(
+                gemini_api_key=settings.GEMINI_API_KEY,
+                groq_api_key=settings.GROQ_API_KEY,
+                ollama_host=settings.OLLAMA_HOST,
+                ollama_model=settings.OLLAMA_DEFAULT_MODEL
+            )
+            ai_health = await ai_service.health_check()
+            health_status["ai_services"] = ai_health
+        except Exception as e:
+            logger.error(f"Erreur health check IA: {e}")
+            health_status["ai_services"] = {"error": str(e)}
+    
+    return health_status
 
 
 @app.get("/system/status", response_model=SystemStatusResponse)
 async def get_system_status():
     """Obtenir le statut complet du système"""
+    
+    # Services IA
+    ai_services = {}
+    if UNIFIED_AI_AVAILABLE:
+        try:
+            ai_service = UnifiedAIService(
+                gemini_api_key=settings.GEMINI_API_KEY,
+                groq_api_key=settings.GROQ_API_KEY,
+                ollama_host=settings.OLLAMA_HOST,
+                ollama_model=settings.OLLAMA_DEFAULT_MODEL
+            )
+            available = ai_service.get_available_services()
+            ai_services = {
+                "available": [s['label'] for s in available],
+                "priority_order": [s['label'] for s in available],
+                "unified_service": True
+            }
+        except Exception as e:
+            ai_services = {"error": str(e), "unified_service": False}
+    else:
+        ai_services = settings.get_ai_services_status()
+    
     return SystemStatusResponse(
         status="operational",
         version=settings.APP_VERSION,
         collectors_available=settings.get_available_collectors(),
-        ai_services=settings.get_ai_services_status(),
+        ai_services=ai_services,
         features={
             "email_alerts": settings.email_enabled,
             "network_analysis": settings.ENABLE_NETWORK_ANALYSIS,
             "anomaly_detection": settings.ENABLE_ANOMALY_DETECTION,
             "topic_modeling": settings.ENABLE_TOPIC_MODELING,
-            "hierarchical_summarizer": HIERARCHICAL_SUMMARIZER_AVAILABLE,
-            "external_ai": EXTERNAL_AI_AVAILABLE,
-            "influencer_manager": INFLUENCER_MANAGER_AVAILABLE
+            "advanced_routes": ROUTES_ADVANCED_AVAILABLE,
+            "unified_ai": UNIFIED_AI_AVAILABLE,
+            "youtube_enhanced": YOUTUBE_ENHANCED_AVAILABLE,
+            "reddit_enhanced": REDDIT_ENHANCED_AVAILABLE,
+            "google_news": GNEWS_ENHANCED_AVAILABLE
         }
     )
 
@@ -893,8 +952,6 @@ async def get_available_sources():
             })
     
     return {"sources": sources_info}
-
-
 
 
 # ============ POINT D'ENTRÉE ============
