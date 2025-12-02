@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brand Monitor - Surveillance & Analyse</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo">
+            <i class="fas fa-shield-alt"></i>
+            <h1>Brand Monitor</h1>
+            <span class="version">v2.0</span>
+        </div>
+
+        <nav class="nav-menu">
+            <a href="#" class="nav-item active" data-view="dashboard">
+                <i class="fas fa-chart-line"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="#" class="nav-item" data-view="keywords">
+                <i class="fas fa-search"></i>
+                <span>Mots-Clés</span>
+            </a>
+            <a href="#" class="nav-item" data-view="mentions">
+                <i class="fas fa-comments"></i>
+                <span>Mentions</span>
+            </a>
+            <a href="#" class="nav-item" data-view="influencers">
+                <i class="fas fa-users"></i>
+                <span>Influenceurs</span>
+            </a>
+            <a href="#" class="nav-item" data-view="analysis">
+                <i class="fas fa-brain"></i>
+                <span>Analyse IA</span>
+            </a>
+            <a href="#" class="nav-item" data-view="reports">
+                <i class="fas fa-file-alt"></i>
+                <span>Rapports</span>
+            </a>
+            <a href="#" class="nav-item" data-view="settings">
+                <i class="fas fa-cog"></i>
+                <span>Paramètres</span>
+            </a>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="status-indicator">
+                <span class="status-dot active"></span>
+                <span>Système Opérationnel</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <button class="btn-icon" id="toggleSidebar">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h2 id="pageTitle">Dashboard</h2>
+            </div>
+            <div class="header-right">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Rechercher..." id="globalSearch">
+                </div>
+                <button class="btn-icon" id="refreshData" title="Actualiser">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <button class="btn-icon" id="notifications" title="Notifications">
+                    <i class="fas fa-bell"></i>
+                    <span class="badge">3</span>
+                </button>
+                <div class="user-menu">
+                    <img src="https://ui-avatars.com/api/?name=Admin&background=3b82f6&color=fff" alt="User">
+                    <span>Admin</span>
+                    <i class="fas fa-chevron-down"></i>
+                </div>
+            </div>
+        </header>
+
+        <!-- Views Container -->
+        <div class="content-container">
+            
+            <!-- DASHBOARD VIEW -->
+            <div id="dashboard-view" class="view active">
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalKeywords">-</h3>
+                            <p>Mots-clés actifs</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <i class="fas fa-comments"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalMentions">-</h3>
+                            <p>Total mentions</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="mentionsToday">-</h3>
+                            <p>Mentions aujourd'hui</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="alerts">-</h3>
+                            <p>Alertes critiques</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Activité Récente</h3>
+                            <button class="btn-icon-small">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="activityChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Distribution des Sentiments</h3>
+                            <button class="btn-icon-small">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="sentimentChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Sources Principales</h3>
+                            <button class="btn-icon-small">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="sourcesList"></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Top Mots-clés</h3>
+                            <button class="btn-icon-small">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            <div id="topKeywordsList"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KEYWORDS VIEW -->
+            <div id="keywords-view" class="view">
+                <div class="view-header">
+                    <div class="view-header-left">
+                        <h2>Gestion des Mots-clés</h2>
+                        <p>Configurez les mots-clés à surveiller sur les réseaux sociaux</p>
+                    </div>
+                    <div class="view-header-right">
+                        <button class="btn btn-primary" id="addKeywordBtn">
+                            <i class="fas fa-plus"></i>
+                            Nouveau Mot-clé
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <div id="keywordsTable"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MENTIONS VIEW -->
+            <div id="mentions-view" class="view">
+                <div class="view-header">
+                    <div class="view-header-left">
+                        <h2>Mentions Collectées</h2>
+                        <p>Consultez et analysez toutes les mentions détectées</p>
+                    </div>
+                    <div class="view-header-right">
+                        <button class="btn btn-secondary" id="exportMentionsBtn">
+                            <i class="fas fa-download"></i>
+                            Exporter
+                        </button>
+                        <button class="btn btn-primary" id="collectNowBtn">
+                            <i class="fas fa-sync-alt"></i>
+                            Collecter Maintenant
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filters-bar">
+                    <div class="filter-group">
+                        <label>Source</label>
+                        <select id="filterSource" class="form-control">
+                            <option value="">Toutes</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Sentiment</label>
+                        <select id="filterSentiment" class="form-control">
+                            <option value="">Tous</option>
+                            <option value="positive">Positif</option>
+                            <option value="neutral">Neutre</option>
+                            <option value="negative">Négatif</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Période</label>
+                        <select id="filterPeriod" class="form-control">
+                            <option value="24h">Dernières 24h</option>
+                            <option value="7d" selected>7 derniers jours</option>
+                            <option value="30d">30 derniers jours</option>
+                            <option value="all">Tout</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-secondary" id="applyFilters">
+                        <i class="fas fa-filter"></i>
+                        Appliquer
+                    </button>
+                </div>
+
+                <div class="card">
+                    <div class="card-body">
+                        <div id="mentionsTable"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- INFLUENCERS VIEW -->
+            <div id="influencers-view" class="view">
+                <div class="view-header">
+                    <div class="view-header-left">
+                        <h2>Analyse des Influenceurs</h2>
+                        <p>Surveillance des acteurs clés et influenceurs émergents</p>
+                    </div>
+                    <div class="view-header-right">
+                        <button class="btn btn-primary" id="refreshInfluencersBtn">
+                            <i class="fas fa-sync-alt"></i>
+                            Actualiser l'Analyse
+                        </button>
+                    </div>
+                </div>
+
+                <div class="tabs">
+                    <button class="tab active" data-tab="activists">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        Activistes Surveillés
+                    </button>
+                    <button class="tab" data-tab="emerging">
+                        <i class="fas fa-chart-line"></i>
+                        Influenceurs Émergents
+                    </button>
+                    <button class="tab" data-tab="media">
+                        <i class="fas fa-newspaper"></i>
+                        Médias Officiels
+                    </button>
+                </div>
+
+                <div class="tab-content active" data-content="activists">
+                    <div id="activistsGrid"></div>
+                </div>
+
+                <div class="tab-content" data-content="emerging">
+                    <div id="emergingGrid"></div>
+                </div>
+
+                <div class="tab-content" data-content="media">
+                    <div id="mediaGrid"></div>
+                </div>
+            </div>
+
+            <!-- ANALYSIS VIEW -->
+            <div id="analysis-view" class="view">
+                <div class="view-header">
+                    <div class="view-header-left">
+                        <h2>Analyse Intelligente</h2>
+                        <p>Synthèses automatiques et détection d'anomalies par IA</p>
+                    </div>
+                </div>
+
+                <div class="analysis-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-brain"></i>
+                            <h3>Résumé Hiérarchique</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="card-description">
+                                Génération automatique de synthèses intelligentes à partir de milliers de contenus
+                            </p>
+                            <button class="btn btn-primary btn-block" id="generateSummaryBtn">
+                                <i class="fas fa-magic"></i>
+                                Générer un Résumé
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <h3>Détection d'Anomalies</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="card-description">
+                                Identification automatique de pics d'activité, changements de sentiment inhabituels
+                            </p>
+                            <button class="btn btn-primary btn-block" id="detectAnomaliesBtn">
+                                <i class="fas fa-search"></i>
+                                Détecter les Anomalies
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-tags"></i>
+                            <h3>Extraction de Topics</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="card-description">
+                                Identification automatique des thèmes principaux dans les conversations
+                            </p>
+                            <button class="btn btn-primary btn-block" id="extractTopicsBtn">
+                                <i class="fas fa-th-list"></i>
+                                Extraire les Topics
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-project-diagram"></i>
+                            <h3>Réseau d'Influence</h3>
+                        </div>
+                        <div class="card-body">
+                            <p class="card-description">
+                                Cartographie des relations et communautés d'influenceurs
+                            </p>
+                            <button class="btn btn-primary btn-block" id="analyzeNetworkBtn">
+                                <i class="fas fa-share-alt"></i>
+                                Analyser le Réseau
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="analysisResults" class="card" style="display: none;">
+                    <div class="card-header">
+                        <h3 id="analysisResultsTitle">Résultats d'Analyse</h3>
+                        <button class="btn-icon-small" id="closeAnalysisResults">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div id="analysisResultsContent"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- REPORTS VIEW -->
+            <div id="reports-view" class="view">
+                <div class="view-header">
+                    <div class="view-header-left">
+                        <h2>Rapports & Exports</h2>
+                        <p>Génération de rapports professionnels au format PDF</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Générer un Rapport Complet</h3>
+                    </div>
+                    <div class="card-body">
+                        <form id="reportForm" class="form-grid">
+                            <div class="form-group">
+                                <label>Mots-clés à inclure</label>
+                                <select id="reportKeywords" class="form-control" multiple>
+                                </select>
+                                <small>Maintenez Ctrl pour sélection multiple</small>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Période d'analyse</label>
+                                <select id="reportPeriod" class="form-control">
+                                    <option value="7">7 derniers jours</option>
+                                    <option value="14">14 derniers jours</option>
+                                    <option value="30" selected>30 derniers jours</option>
+                                    <option value="90">90 derniers jours</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Sections à inclure</label>
+                                <div class="checkbox-group">
+                                    <label class="checkbox">
+                                        <input type="checkbox" checked name="section" value="summary">
+                                        <span>Résumé Exécutif</span>
+                                    </label>
+                                    <label class="checkbox">
+                                        <input type="checkbox" checked name="section" value="sentiment">
+                                        <span>Analyse de Sentiment</span>
+                                    </label>
+                                    <label class="checkbox">
+                                        <input type="checkbox" checked name="section" value="influencers">
+                                        <span>Profils d'Influenceurs</span>
+                                    </label>
+                                    <label class="checkbox">
+                                        <input type="checkbox" name="section" value="network">
+                                        <span>Analyse de Réseau</span>
+                                    </label>
+                                    <label class="checkbox">
+                                        <input type="checkbox" name="section" value="anomalies">
+                                        <span>Détection d'Anomalies</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="form-group full-width">
+                                <button type="submit" class="btn btn-primary btn-large">
+                                    <i class="fas fa-file-pdf"></i>
+                                    Générer le Rapport PDF
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SETTINGS VIEW -->
+            <div id="settings-view" class="view">
+                <div class="view-header">
+                    <div class="view-header-left">
+                        <h2>Paramètres Système</h2>
+                        <p>Configuration et gestion du système de surveillance</p>
+                    </div>
+                </div>
+
+                <div class="settings-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-robot"></i>
+                            <h3>Services IA</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="aiServicesStatus"></div>
+                            <button class="btn btn-secondary btn-block" id="testAiBtn">
+                                <i class="fas fa-vial"></i>
+                                Tester les Services IA
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-database"></i>
+                            <h3>Sources de Collecte</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="sourcesStatus"></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-clock"></i>
+                            <h3>Collecte Automatique</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label>Intervalle de collecte</label>
+                                <select id="collectionInterval" class="form-control">
+                                    <option value="30">Toutes les 30 minutes</option>
+                                    <option value="60" selected>Toutes les heures</option>
+                                    <option value="120">Toutes les 2 heures</option>
+                                    <option value="360">Toutes les 6 heures</option>
+                                </select>
+                            </div>
+                            <button class="btn btn-primary btn-block" id="saveIntervalBtn">
+                                <i class="fas fa-save"></i>
+                                Enregistrer
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <i class="fas fa-bell"></i>
+                            <h3>Alertes & Notifications</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="checkbox-group">
+                                <label class="checkbox">
+                                    <input type="checkbox" checked id="alertEmail">
+                                    <span>Alertes par Email</span>
+                                </label>
+                                <label class="checkbox">
+                                    <input type="checkbox" id="alertWebhook">
+                                    <span>Webhook externe</span>
+                                </label>
+                                <label class="checkbox">
+                                    <input type="checkbox" checked id="alertBrowser">
+                                    <span>Notifications navigateur</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="modalOverlay" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modalTitle">Modal Title</h3>
+                <button class="modal-close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Dynamic content -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <i class="fas fa-spinner fa-spin"></i>
+            <p id="loadingText">Chargement...</p>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
