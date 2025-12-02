@@ -56,10 +56,11 @@ def init_db():
         raise
 
 
-# Événements de connexion pour SQLite (si utilisé)
 @event.listens_for(engine, "connect")
 def set_sqlite_pragma(dbapi_conn, connection_record):
-    """Activer foreign keys pour SQLite"""
-    cursor = dbapi_conn.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
+    """Activer foreign keys pour SQLite uniquement"""
+    # Ne s'exécute que pour SQLite, pas pour PostgreSQL
+    if 'sqlite' in str(engine.url).lower():
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()

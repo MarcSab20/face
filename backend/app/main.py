@@ -71,7 +71,17 @@ except ImportError:
 
 # Modèles Pydantic
 from pydantic import BaseModel
+from app.scheduler import init_scheduler, start_scheduler, stop_scheduler
+from app.sentiment_analyzer import SentimentAnalyzer
+from app.collectors.rss_collector import RSSCollector
+from app.collectors.collectors_stubs import GoogleSearchCollector
+from app.collectors.collectors_stubs import MastodonCollector
+from app.collectors.collectors_stubs import BlueskyCollector
+from app.collectors.collectors_stubs import TelegramCollector
+from app.collectors.collectors_stubs import YouTubeCollector
+from app.collectors.collectors_stubs import RedditCollector
 
+sentiment_analyzer = SentimentAnalyzer()
 # Configuration du logging
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
