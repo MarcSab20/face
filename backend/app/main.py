@@ -69,6 +69,7 @@ from app.collectors.collectors_stubs import TelegramCollector
 from app.collectors.collectors_stubs import YouTubeCollector
 from app.collectors.collectors_stubs import RedditCollector
 
+from app.routers import report_routes
 sentiment_analyzer = SentimentAnalyzer()
 
 # Configuration du logging
@@ -138,7 +139,8 @@ async def startup_event():
             logger.info("✅ Routes avancées montées")
         else:
             logger.warning("⚠️ Routes avancées non disponibles")
-        
+            
+        app.include_router(report_routes.router)
         logger.info("=" * 60)
         logger.info("🚀 APPLICATION DÉMARRÉE AVEC SUCCÈS")
         logger.info("=" * 60)

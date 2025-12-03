@@ -1315,43 +1315,203 @@ const Reports = {
         });
     },
 
-    async generateReport() {
-        try {
-            Utils.showLoading('Génération du rapport PDF...');
+   async generateReport() {
+    try {
+        Utils.showLoading('Génération du rapport...');
 
-            const select = document.getElementById('reportKeywords');
-            const keywordIds = Array.from(select.selectedOptions).map(opt => opt.value);
-            const period = document.getElementById('reportPeriod').value;
-            const sections = Array.from(document.querySelectorAll('input[name="section"]:checked')).map(cb => cb.value);
+        const select = document.getElementById('reportKeywords');
+        const keywordIds = Array.from(select.selectedOptions).map(opt => opt.value);
+        const period = document.getElementById('reportPeriod').value;
 
-            if (keywordIds.length === 0) {
-                Utils.hideLoading();
-                Utils.showError('Sélectionnez au moins un mot-clé');
-                return;
-            }
-
-            // TODO: Implémenter l'endpoint de génération de rapport PDF
-            // Pour l'instant, on génère un rapport JSON
-            const result = await Utils.fetchAPI(`/api/advanced/summarize?keyword_ids=${keywordIds.join(',')}&days=${period}`, {
-                method: 'POST'
-            });
-
+        if (keywordIds.length === 0) {
             Utils.hideLoading();
-            Utils.showSuccess('Rapport généré avec succès (JSON)');
-            
-            // Télécharger le JSON
-            const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `rapport-${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-
-        } catch (error) {
-            Utils.hideLoading();
-            console.error('Error generating report:', error);
+            Utils.showError('Sélectionnez au moins un mot-clé');
+            return;
         }
+
+        // ✅ BON ENDPOINT avec bons paramètres
+        // Construire l'URL avec keyword_ids multiple
+        const params = new URLSearchParams();
+        keywordIds.forEach(id => params.append('keyword_ids', id));
+        params.append('period', period); // Utilise directement la valeur (7d, 30d, etc.)
+        params.append('include_ai_analysis', 'true');
+        params.append('include_influencers', 'true');
+        params.append('include_trends', 'true');
+
+        const result = await Utils.fetchAPI(`/api/reports/generate?${params.toString()}`, {
+            method: 'POST'
+        });
+
+        Utils.hideLoading();
+
+        // Afficher le rapport dans l'interface
+        this.displayReport(result);
+
+        Utils.showSuccess('Rapport généré avec succès');
+
+    } catch (error) {
+        Utils.hideLoading();
+        console.error('Error generating report:', error);
+        Utils.showError('Erreur lors de la génération du rapport');
     }
+},
+
+// ✅ NOUVELLE FONCTION : Afficher le rapport
+displayReport(report) {
+    const container = document.getElementById('reportResult');
+    if (!container) return;
+
+    const keywords = report.metadata.keywords.map(k => k.keyword).join(', ');
+    
+    let html = `
+        <div class="report-container">
+            <div class="report-header">
+                <h2>📊 Rapport d'Analyse</h2>
+                <p class="report-meta">
+                    Généré le ${new Date(report.metadata.generated_at).toLocaleString('fr-FR')}
+                    <br>Mots-clés : ${keywords}
+                    <br>Période : ${report.metadata.period}
+                </p>
+            </div>
+
+            ${report.executive_summary ? `
+            <div class="report-section">
+                <h3>📝 Résumé Exécutif</h3>
+                <p class="executive-summary">${report.executive_summary}</p>
+            </div>
+            ` : ''}
+
+            <div class="report-section">
+                <h3>📈 Statistiques Globales</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">${report.statistics.total_mentions}</div>
+                        <div class="stat-label">Mentions totales</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value sentiment-${report.statistics.sentiment_label}">
+                            ${report.statistics.sentiment_label}
+                        </div>
+                        <div class="stat-label">Sentiment moyen (${report.statistics.avg_sentiment_score})</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${report.statistics.unique_authors}</div>
+                        <div class="stat-label">Auteurs uniques</div>
+                    </div>
+                </div>
+
+                <h4>Distribution des sentiments</h4>
+                <div class="sentiment-bars">
+                    <div class="sentiment-bar positive" style="width: ${report.statistics.sentiment_distribution.positive_percent}%">
+                        <span>Positif: ${report.statistics.sentiment_distribution.positive} (${report.statistics.sentiment_distribution.positive_percent}%)</span>
+                    </div>
+                    <div class="sentiment-bar neutral" style="width: ${report.statistics.sentiment_distribution.neutral_percent}%">
+                        <span>Neutre: ${report.statistics.sentiment_distribution.neutral} (${report.statistics.sentiment_distribution.neutral_percent}%)</span>
+                    </div>
+                    <div class="sentiment-bar negative" style="width: ${report.statistics.sentiment_distribution.negative_percent}%">
+                        <span>Négatif: ${report.statistics.sentiment_distribution.negative} (${report.statistics.sentiment_distribution.negative_percent}%)</span>
+                    </div>
+                </div>
+            </div>
+
+            ${report.influencers && report.influencers.length > 0 ? `
+            <div class="report-section">
+                <h3>👥 Top Influenceurs</h3>
+                <table class="influencers-table">
+                    <thead>
+                        <tr>
+                            <th>Auteur</th>
+                            <th>Mentions</th>
+                            <th>Sources</th>
+                            <th>Sentiment</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${report.influencers.slice(0, 10).map(inf => `
+                        <tr>
+                            <td><strong>${inf.name}</strong></td>
+                            <td>${inf.mentions_count}</td>
+                            <td>${inf.sources.join(', ')}</td>
+                            <td class="sentiment-${inf.sentiment_label}">
+                                ${inf.sentiment_label} (${inf.avg_sentiment})
+                            </td>
+                        </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+            ` : ''}
+
+            ${report.strategic_recommendations && report.strategic_recommendations.length > 0 ? `
+            <div class="report-section">
+                <h3>💡 Recommandations Stratégiques</h3>
+                <div class="recommendations">
+                    ${report.strategic_recommendations.map(rec => `
+                    <div class="recommendation priority-${rec.priority}">
+                        <div class="rec-priority">[${rec.priority.toUpperCase()}]</div>
+                        <div class="rec-content">
+                            <strong>${rec.action}</strong>
+                            <p>${rec.rationale}</p>
+                        </div>
+                    </div>
+                    `).join('')}
+                </div>
+            </div>
+            ` : ''}
+
+            ${report.key_topics && report.key_topics.length > 0 ? `
+            <div class="report-section">
+                <h3>🔑 Sujets Clés</h3>
+                <div class="topics-cloud">
+                    ${report.key_topics.map(topic => `
+                    <span class="topic-tag" style="font-size: ${0.8 + (topic.count / 100)}em">
+                        ${topic.topic} (${topic.count})
+                    </span>
+                    `).join('')}
+                </div>
+            </div>
+            ` : ''}
+
+            <div class="report-actions">
+                <button onclick="Reports.exportJSON()" class="btn btn-primary">
+                    💾 Exporter en JSON
+                </button>
+                <button onclick="Reports.exportPDF()" class="btn btn-secondary">
+                    📄 Exporter en PDF (à venir)
+                </button>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+
+    // Sauvegarder le rapport pour l'export
+    this.currentReport = report;
+},
+// ✅ NOUVELLE FONCTION : Exporter en JSON
+exportJSON() {
+    if (!this.currentReport) {
+        Utils.showError('Aucun rapport à exporter');
+        return;
+    }
+
+    const blob = new Blob([JSON.stringify(this.currentReport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rapport-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    Utils.showSuccess('Rapport exporté en JSON');
+},
+
+// ✅ NOUVELLE FONCTION : Exporter en PDF (placeholder)
+exportPDF() {
+    Utils.showError('Export PDF en cours d\'implémentation');
+}
+
+
 };
 
 // Module Settings
