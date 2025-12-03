@@ -72,6 +72,13 @@ from app.collectors.collectors_stubs import RedditCollector
 from app.routers import report_routes
 sentiment_analyzer = SentimentAnalyzer()
 
+try:
+    from app.routers import intelligent_report
+    INTELLIGENT_REPORT_AVAILABLE = True
+except ImportError:
+    INTELLIGENT_REPORT_AVAILABLE = False
+    logging.warning("Routes de rapport intelligent non disponibles")
+
 # Configuration du logging
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL),
@@ -131,7 +138,11 @@ async def startup_event():
             logger.info(f"✅ Services IA disponibles: {[s['label'] for s in available_services]}")
         else:
             logger.warning("⚠️ Service IA unifié non disponible")
-        
+            
+        if INTELLIGENT_REPORT_AVAILABLE:
+            app.include_router(intelligent_report.router)
+            logger.info("✅ Routes de rapport intelligent montées")
+
         # Monter les routes avancées si disponibles
         if ROUTES_ADVANCED_AVAILABLE:
             advanced_router = get_advanced_router()
@@ -139,7 +150,7 @@ async def startup_event():
             logger.info("✅ Routes avancées montées")
         else:
             logger.warning("⚠️ Routes avancées non disponibles")
-            
+
         app.include_router(report_routes.router)
         logger.info("=" * 60)
         logger.info("🚀 APPLICATION DÉMARRÉE AVEC SUCCÈS")

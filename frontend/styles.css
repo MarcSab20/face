@@ -726,3 +726,185 @@ table tr:hover {
 .mt-2 { margin-top: 1rem; }
 .mb-2 { margin-bottom: 1rem; }
 .hidden { display: none !important; } 
+
+/* ============================================================
+   STYLES POUR RAPPORT NARRATIF
+   ============================================================ */
+
+.narrative-report {
+    background: white;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.report-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 40px;
+    text-align: center;
+}
+
+.report-classification {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 1px;
+    margin-bottom: 20px;
+}
+
+.report-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 25px;
+    line-height: 1.2;
+}
+
+.report-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.meta-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    opacity: 0.95;
+}
+
+.meta-item i {
+    font-size: 1rem;
+}
+
+.report-body {
+    padding: 50px 60px;
+}
+
+.report-section {
+    margin-bottom: 50px;
+}
+
+.report-section:last-child {
+    margin-bottom: 0;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 3px solid var(--primary);
+}
+
+.section-header i {
+    font-size: 1.8rem;
+    color: var(--primary);
+}
+
+.section-header h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--dark);
+    margin: 0;
+}
+
+.section-content {
+    color: var(--dark);
+    line-height: 1.9;
+}
+
+.narrative-paragraph {
+    font-size: 1.05rem;
+    margin-bottom: 20px;
+    text-align: justify;
+    color: #2d3748;
+}
+
+.narrative-subheading {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--dark);
+    margin: 30px 0 15px 0;
+}
+
+.report-footer {
+    background: var(--light);
+    padding: 40px 60px;
+    border-top: 3px solid var(--border);
+}
+
+.footer-info {
+    margin-bottom: 25px;
+}
+
+.footer-info p {
+    color: var(--secondary);
+    font-size: 0.9rem;
+    line-height: 1.7;
+}
+
+.footer-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
+
+/* Impression */
+@media print {
+    .sidebar,
+    .header,
+    .view-header,
+    .footer-actions,
+    .btn {
+        display: none !important;
+    }
+    
+    .main-content {
+        margin-left: 0;
+    }
+    
+    .narrative-report {
+        box-shadow: none;
+        max-width: 100%;
+    }
+    
+    .report-header {
+        background: white !important;
+        color: black !important;
+        border-bottom: 3px solid #000;
+    }
+    
+    .section-header {
+        page-break-after: avoid;
+    }
+    
+    .narrative-paragraph {
+        page-break-inside: avoid;
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .report-body,
+    .report-footer {
+        padding: 30px 20px;
+    }
+    
+    .report-title {
+        font-size: 1.8rem;
+    }
+    
+    .report-meta {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

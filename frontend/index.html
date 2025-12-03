@@ -391,30 +391,44 @@
             </div>
 
             <!-- REPORTS VIEW -->
+            <!-- REPORTS VIEW -->
+            <!-- REPORTS VIEW -->
             <div id="reports-view" class="view">
                 <div class="view-header">
                     <div class="view-header-left">
                         <h2>Rapports & Exports</h2>
-                        <p>Génération de rapports professionnels au format PDF</p>
+                        <p>Génération de rapports professionnels avec analyse IA</p>
                     </div>
                 </div>
 
                 <div class="card">
                     <div class="card-header">
-                        <h3>Générer un Rapport Complet</h3>
+                        <h3>📊 Générer un Rapport Intelligent</h3>
                     </div>
                     <div class="card-body">
                         <form id="reportForm" class="form-grid">
+                            <!-- Sélection des mots-clés -->
                             <div class="form-group">
-                                <label>Mots-clés à inclure</label>
-                                <select id="reportKeywords" class="form-control" multiple>
+                                <label for="reportKeywords">
+                                    <i class="fas fa-tags"></i>
+                                    Mots-clés à analyser *
+                                </label>
+                                <select id="reportKeywords" multiple size="6" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
+                                    <option value="">Chargement...</option>
                                 </select>
-                                <small>Maintenez Ctrl pour sélection multiple</small>
+                                <small style="color: #666; display: block; margin-top: 5px;">
+                                    <i class="fas fa-info-circle"></i>
+                                    Maintenez Ctrl (Windows) ou Cmd (Mac) pour sélectionner plusieurs mots-clés
+                                </small>
                             </div>
 
+                            <!-- Période d'analyse -->
                             <div class="form-group">
-                                <label>Période d'analyse</label>
-                                <select id="reportPeriod" class="form-control">
+                                <label for="reportPeriod">
+                                    <i class="fas fa-calendar"></i>
+                                    Période d'analyse *
+                                </label>
+                                <select id="reportPeriod" required style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px;">
                                     <option value="7">7 derniers jours</option>
                                     <option value="14">14 derniers jours</option>
                                     <option value="30" selected>30 derniers jours</option>
@@ -422,40 +436,73 @@
                                 </select>
                             </div>
 
-                            <div class="form-group">
-                                <label>Sections à inclure</label>
-                                <div class="checkbox-group">
-                                    <label class="checkbox">
-                                        <input type="checkbox" checked name="section" value="summary">
-                                        <span>Résumé Exécutif</span>
+                            <!-- Sections à inclure -->
+                            <div class="form-group" style="grid-column: 1 / -1;">
+                                <label>
+                                    <i class="fas fa-list-check"></i>
+                                    Sections à inclure dans le rapport *
+                                </label>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin-top: 10px;">
+                                    <label style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 5px; cursor: pointer;">
+                                        <input type="checkbox" name="section" value="summary" checked style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                                        <span>
+                                            <i class="fas fa-file-alt" style="color: #667eea; margin-right: 5px;"></i>
+                                            <strong>Résumé Exécutif</strong>
+                                        </span>
                                     </label>
-                                    <label class="checkbox">
-                                        <input type="checkbox" checked name="section" value="sentiment">
-                                        <span>Analyse de Sentiment</span>
+                                    
+                                    <label style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 5px; cursor: pointer;">
+                                        <input type="checkbox" name="section" value="sentiment" checked style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                                        <span>
+                                            <i class="fas fa-heart" style="color: #f56565; margin-right: 5px;"></i>
+                                            <strong>Analyse de Sentiment</strong>
+                                        </span>
                                     </label>
-                                    <label class="checkbox">
-                                        <input type="checkbox" checked name="section" value="influencers">
-                                        <span>Profils d'Influenceurs</span>
+                                    
+                                    <label style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 5px; cursor: pointer;">
+                                        <input type="checkbox" name="section" value="influencers" checked style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                                        <span>
+                                            <i class="fas fa-users" style="color: #48bb78; margin-right: 5px;"></i>
+                                            <strong>Influenceurs & Acteurs</strong>
+                                        </span>
                                     </label>
-                                    <label class="checkbox">
-                                        <input type="checkbox" name="section" value="network">
-                                        <span>Analyse de Réseau</span>
+                                    
+                                    <label style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 5px; cursor: pointer;">
+                                        <input type="checkbox" name="section" value="themes" checked style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                                        <span>
+                                            <i class="fas fa-tags" style="color: #ed8936; margin-right: 5px;"></i>
+                                            <strong>Thèmes & Préoccupations</strong>
+                                        </span>
                                     </label>
-                                    <label class="checkbox">
-                                        <input type="checkbox" name="section" value="anomalies">
-                                        <span>Détection d'Anomalies</span>
+                                    
+                                    <label style="display: flex; align-items: center; padding: 10px; background: #f8f9fa; border-radius: 5px; cursor: pointer;">
+                                        <input type="checkbox" name="section" value="recommendations" checked style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                                        <span>
+                                            <i class="fas fa-lightbulb" style="color: #ecc94b; margin-right: 5px;"></i>
+                                            <strong>Recommandations Stratégiques</strong>
+                                        </span>
                                     </label>
                                 </div>
+                                <small style="color: #666; display: block; margin-top: 10px;">
+                                    <i class="fas fa-info-circle"></i>
+                                    Sélectionnez au moins une section à inclure dans le rapport
+                                </small>
                             </div>
 
-                            <div class="form-group full-width">
-                                <button type="submit" class="btn btn-primary btn-large">
-                                    <i class="fas fa-file-pdf"></i>
-                                    Générer le Rapport PDF
+                            <!-- Bouton de génération -->
+                            <div class="form-group" style="grid-column: 1 / -1; margin-top: 10px;">
+                                <button type="submit" class="btn btn-primary" style="width: 100%; padding: 15px; font-size: 16px;">
+                                    <i class="fas fa-magic"></i>
+                                    Générer le Rapport Intelligent
                                 </button>
                             </div>
                         </form>
                     </div>
+                </div>
+
+                <!-- Conteneur pour afficher le rapport généré -->
+                <div id="reportResult" style="margin-top: 40px;">
+                    <!-- Le rapport sera injecté ici dynamiquement -->
                 </div>
             </div>
 
