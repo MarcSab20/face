@@ -1394,58 +1394,85 @@ const Reports = {
     },
 
     displayNarrativeReport(report) {
+        console.log('📊 Affichage rapport narratif', report);
+        
+        // Sauvegarder le rapport dans l'objet
+        this.currentReport = report;
+        
         const container = document.getElementById('reportResult');
         if (!container) {
-            console.error('❌ Conteneur reportResult introuvable');
+            console.error('❌ Container reportResult introuvable');
             return;
         }
 
-        const keywords = report.metadata.keywords.join(', ');
-        const sections = report.sections;
+        // ===== EXTRACTION SÉCURISÉE DES DONNÉES =====
+        const metadata = report.metadata || {};
+        const sections = report.sections || {};
         
-        console.log('🎨 Sections disponibles:', Object.keys(sections));
+        // Gérer keywords (peut être string ou array)
+        let keywords = 'N/A';
+        if (metadata.keywords) {
+            if (Array.isArray(metadata.keywords)) {
+                keywords = metadata.keywords.join(', ');
+            } else if (typeof metadata.keywords === 'string') {
+                keywords = metadata.keywords;
+            }
+        }
         
-        // Ordre d'affichage des sections
+        // Gérer ai_service_used (STRING pas ARRAY)
+        let aiService = 'Service IA';
+        if (metadata.ai_service_used) {
+            aiService = metadata.ai_service_used; // ✅ Singulier, string directement
+        } else if (metadata.ai_services_used) {
+            // Fallback pour ancienne version (si c'était un tableau)
+            if (Array.isArray(metadata.ai_services_used)) {
+                aiService = metadata.ai_services_used.join(', ');
+            } else {
+                aiService = metadata.ai_services_used;
+            }
+        }
+        
+        // Ordre et configuration des sections
         const sectionOrder = [
-            { key: 'executive_summary', title: '📋 Résumé Exécutif', icon: 'fas fa-file-alt' },
-            { key: 'sentiment_analysis', title: '💭 Analyse de Sentiment', icon: 'fas fa-heart' },
-            { key: 'influencers', title: '👥 Influenceurs et Acteurs Clés', icon: 'fas fa-users' },
-            { key: 'themes', title: '🔍 Thèmes et Préoccupations', icon: 'fas fa-tags' },
-            { key: 'recommendations', title: '💡 Recommandations Stratégiques', icon: 'fas fa-lightbulb' }
+            { key: 'summary', title: 'Résumé Exécutif', icon: 'fa-file-alt' },
+            { key: 'sentiment', title: 'Analyse des Sentiments', icon: 'fa-heart' },
+            { key: 'influencers', title: 'Acteurs Clés', icon: 'fa-users' },
+            { key: 'themes', title: 'Thèmes Principaux', icon: 'fa-lightbulb' },
+            { key: 'recommendations', title: 'Recommandations', icon: 'fa-check-circle' }
         ];
-        
-        let html = `
+
+        // ===== CONSTRUCTION DU HTML =====
+        const html = `
             <div class="narrative-report">
-                <!-- En-tête du rapport -->
+                <!-- En-tête -->
                 <div class="report-header">
-                    <div class="report-classification">${report.metadata.classification}</div>
-                    <h1 class="report-title">${report.metadata.title}</h1>
-                    <div class="report-meta">
+                    <div class="report-title-block">
+                        <h2 class="report-title">${metadata.title || 'Rapport d\'Analyse'}</h2>
+                        <div class="report-classification">
+                            ${metadata.classification || 'DOCUMENT DE TRAVAIL'}
+                        </div>
+                    </div>
+                    
+                    <div class="report-metadata">
                         <div class="meta-item">
                             <i class="fas fa-calendar"></i>
-                            <span>Généré le ${new Date(report.metadata.generated_at).toLocaleDateString('fr-FR', {
-                                day: 'numeric',
-                                month: 'long',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                            })}</span>
+                            <span>Généré le ${Utils.formatDate(metadata.generated_at)}</span>
                         </div>
                         <div class="meta-item">
                             <i class="fas fa-clock"></i>
-                            <span>Période: ${report.metadata.period}</span>
+                            <span>Période: ${metadata.period || 'N/A'}</span>
                         </div>
                         <div class="meta-item">
-                            <i class="fas fa-search"></i>
+                            <i class="fas fa-tags"></i>
                             <span>Mots-clés: ${keywords}</span>
                         </div>
                         <div class="meta-item">
                             <i class="fas fa-database"></i>
-                            <span>${report.metadata.relevant_mentions_analyzed} contenus pertinents analysés</span>
+                            <span>${metadata.relevant_mentions_analyzed || metadata.total_mentions_collected || 0} contenus analysés</span>
                         </div>
                         <div class="meta-item">
                             <i class="fas fa-robot"></i>
-                            <span>IA: ${report.metadata.ai_services_used.join(', ')}</span>
+                            <span>IA: ${aiService}</span>
                         </div>
                     </div>
                 </div>
@@ -1458,16 +1485,16 @@ const Reports = {
                             return '';
                         }
                         
-                        console.log(`✅ Affichage section ${section.key}`);
+                        const content = sections[section.key];
                         
                         return `
                             <div class="report-section">
-                                <div class="section-header">
-                                    <i class="${section.icon}"></i>
-                                    <h2>${section.title}</h2>
-                                </div>
+                                <h3 class="section-title">
+                                    <i class="fas ${section.icon}"></i>
+                                    ${section.title}
+                                </h3>
                                 <div class="section-content">
-                                    ${this.formatNarrativeText(sections[section.key])}
+                                    ${this.formatNarrativeText(content)}
                                 </div>
                             </div>
                         `;
@@ -1476,20 +1503,18 @@ const Reports = {
 
                 <!-- Pied de page -->
                 <div class="report-footer">
-                    <div class="footer-info">
-                        <p><strong>Note:</strong> Ce rapport a été généré automatiquement par analyse d'intelligence artificielle. 
-                        Les conclusions présentées sont basées sur ${report.metadata.relevant_mentions_analyzed} contenus 
-                        pertinents collectés sur une période de ${report.metadata.period}.</p>
-                        <p style="margin-top: 10px;"><strong>Service IA utilisé:</strong> ${report.metadata.ai_services_used.join(', ')}</p>
+                    <div class="footer-note">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Ce rapport a été généré automatiquement par analyse IA. 
+                        Les contenus reflètent les discussions publiques collectées et ne constituent pas une position officielle.</span>
                     </div>
-                    <div class="footer-actions">
+                    
+                    <div class="report-actions">
                         <button onclick="Reports.exportJSON()" class="btn btn-secondary">
-                            <i class="fas fa-download"></i>
-                            Exporter en JSON
+                            <i class="fas fa-download"></i> Exporter JSON
                         </button>
-                        <button onclick="Reports.printReport()" class="btn btn-primary">
-                            <i class="fas fa-print"></i>
-                            Imprimer le Rapport
+                        <button onclick="Reports.printReport()" class="btn btn-secondary">
+                            <i class="fas fa-print"></i> Imprimer
                         </button>
                     </div>
                 </div>
@@ -1497,16 +1522,22 @@ const Reports = {
         `;
 
         container.innerHTML = html;
-
-        // Sauvegarder le rapport
-        this.currentReport = report;
-
-        console.log('✅ Rapport affiché');
-
-        // Scroll vers le rapport
+        
+        // Animation d'apparition
         setTimeout(() => {
-            container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            const report = container.querySelector('.narrative-report');
+            if (report) {
+                report.style.opacity = '0';
+                report.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    report.style.transition = 'all 0.5s ease';
+                    report.style.opacity = '1';
+                    report.style.transform = 'translateY(0)';
+                }, 50);
+            }
         }, 100);
+        
+        console.log('✅ Rapport narratif affiché avec succès');
     },
 
     formatNarrativeText(text) {

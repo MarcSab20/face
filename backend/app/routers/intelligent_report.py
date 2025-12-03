@@ -1,10 +1,10 @@
 """
 Routes pour la génération de rapports intelligents narratifs
-VERSION CORRIGÉE - Priorisation Groq/Gemini
+VERSION CORRIGÉE - SANS ERREUR F-STRING
+Priorité absolue : Groq → Gemini → Ollama
 """
 
-from fastapi import APIRouter, HTTPException, Query
-from fastapi import Depends
+from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Optional
 from datetime import datetime, timedelta
 import logging
@@ -13,6 +13,7 @@ from app.database import get_db
 from app.models import Keyword, Mention
 from app.unified_ai_service import UnifiedAIService
 import os
+import json
 
 router = APIRouter(prefix="/api/reports", tags=["Reports"])
 logger = logging.getLogger(__name__)
@@ -20,263 +21,281 @@ logger = logging.getLogger(__name__)
 
 def get_prioritized_ai_service() -> UnifiedAIService:
     """
-    Initialise le service IA avec PRIORISATION ABSOLUE de Groq et Gemini
+    Initialise le service IA avec PRIORISATION ABSOLUE Groq → Gemini → Ollama
     """
-    # Récupérer les clés API depuis l'environnement
     groq_key = os.getenv("GROQ_API_KEY")
     gemini_key = os.getenv("GEMINI_API_KEY")
     
-    logger.info("🔍 Vérification des clés API disponibles:")
-    logger.info(f"   - Groq API Key: {'✅ Présente' if groq_key else '❌ Manquante'}")
-    logger.info(f"   - Gemini API Key: {'✅ Présente' if gemini_key else '❌ Manquante'}")
+    logger.info("🔍 Configuration des services IA:")
+    logger.info(f"   - Groq: {'✅ Configuré' if groq_key else '❌ Manquant'}")
+    logger.info(f"   - Gemini: {'✅ Configuré' if gemini_key else '❌ Manquant'}")
     
-    # Créer le service avec priorisation explicite
+    if not groq_key and not gemini_key:
+        logger.error("❌ CRITIQUE: Aucune API externe configurée!")
+        raise HTTPException(
+            status_code=503,
+            detail="Aucune API IA externe configurée. Veuillez configurer GROQ_API_KEY ou GEMINI_API_KEY"
+        )
+    
     service = UnifiedAIService(
         groq_api_key=groq_key,
         gemini_api_key=gemini_key,
-        ollama_host=os.getenv("OLLAMA_HOST", "http://ollama:11434")
+        ollama_host=os.getenv("OLLAMA_HOST", "http://ollama:11434"),
+        ollama_model=os.getenv("OLLAMA_DEFAULT_MODEL", "gemma:2b")
     )
-    
-    # Vérifier les services disponibles
-    available = service.get_available_services()
-    logger.info(f"🤖 Services IA disponibles: {available}")
-    
-    if not groq_key and not gemini_key:
-        logger.warning("⚠️ ATTENTION: Aucune clé API externe - utilisation d'Ollama uniquement")
     
     return service
 
 
 def filter_relevant_content(mentions: List[Mention], context_keywords: List[str]) -> List[Mention]:
     """
-    Filtre les mentions pour ne garder que celles qui sont réellement pertinentes au contexte
-    
-    Args:
-        mentions: Liste de toutes les mentions
-        context_keywords: Mots-clés du contexte de surveillance
-    
-    Returns:
-        Liste filtrée de mentions pertinentes
+    Filtre intelligent des mentions pertinentes
     """
     relevant_mentions = []
     
     for mention in mentions:
-        # Combiner tous les textes disponibles
         combined_text = " ".join(filter(None, [
             mention.title or "",
             mention.content or "",
             mention.author or ""
         ])).lower()
         
-        # Vérifier si au moins un mot-clé du contexte est présent
+        # Vérifier pertinence
         is_relevant = any(kw.lower() in combined_text for kw in context_keywords)
         
-        # Éliminer les contenus trop courts (probablement spam)
+        # Éliminer contenus trop courts (spam)
         if is_relevant and len(combined_text) > 50:
             relevant_mentions.append(mention)
     
-    logger.info(f"📊 Filtrage: {len(mentions)} mentions → {len(relevant_mentions)} pertinentes")
-    
+    logger.info(f"📊 Filtrage: {len(mentions)} → {len(relevant_mentions)} contenus pertinents")
     return relevant_mentions
 
 
-async def generate_narrative_section(
+def build_content_list(contents: List[dict], max_items: int = 15) -> str:
+    """
+    Construire une liste de contenus pour les prompts
+    """
+    items = []
+    for c in contents[:max_items]:
+        title = c.get("title", "Sans titre")[:150]
+        items.append(f"• {title}")
+    
+    return "\n".join(items)
+
+
+def build_influencer_list(influencers: List[dict]) -> str:
+    """
+    Construire une liste d'influenceurs pour les prompts
+    """
+    items = []
+    for i, inf in enumerate(influencers[:5], 1):
+        author = inf.get("author", "Inconnu")
+        content_samples = inf.get("content", [])
+        sample_titles = [c.get("title", "")[:60] for c in content_samples[:2]]
+        sample_text = ", ".join(sample_titles)
+        items.append(f"{i}. {author} - Exemples d'interventions : {sample_text}")
+    
+    return "\n".join(items)
+
+
+async def generate_narrative_pure(
     ai_service: UnifiedAIService,
     section_name: str,
     data: dict,
     context: str
 ) -> str:
     """
-    Génère une section narrative en utilisant l'IA avec PRIORISATION GROQ/GEMINI
-    
-    Args:
-        ai_service: Service IA unifié
-        section_name: Nom de la section
-        data: Données à analyser
-        context: Contexte de surveillance
-    
-    Returns:
-        Texte narratif généré
+    Génère une section PUREMENT NARRATIVE sans aucune statistique
+    Force l'utilisation de Groq ou Gemini
     """
-    logger.info(f"🎨 Génération section: {section_name}")
+    logger.info(f"🎨 Génération narrative: {section_name}")
     
-    # Construire le prompt spécifique à chaque section
-    prompts = {
-        "summary": f"""Contexte: {context}
+    # Construire les contenus formatés AVANT les f-strings
+    if section_name == "summary":
+        content_list = build_content_list(data.get('content', []))
+        prompt = f"""Contexte de surveillance : {context}
 
-Données: {len(data.get('content', []))} contenus les plus représentatifs collectés.
+Vous analysez des discussions publiques collectées sur ce sujet.
 
-INSTRUCTION CRITIQUE:
-Rédigez un résumé exécutif professionnel de 2-4 paragraphes qui présente les tendances principales observées dans les discussions.
+CONTENUS COLLECTÉS (extraits représentatifs) :
+{content_list}
 
-RÈGLES STRICTES:
-- Rédigez UNIQUEMENT en paragraphes fluides et cohérents
-- N'utilisez JAMAIS de listes à puces, numéros ou bullet points
-- N'incluez AUCUN chiffre, statistique ou pourcentage
-- Ton professionnel, factuel, neutre (style briefing ministériel)
-- Ignorez complètement les données non pertinentes au contexte
-- Concentrez-vous sur les grandes tendances, pas les détails
+INSTRUCTION ABSOLUE :
+Rédigez un résumé narratif en 3-4 paragraphes fluides qui raconte ce qui se dit dans ces discussions.
 
-Exemples de contenus analysés (titres):
-{chr(10).join([f'- {c.get("title", "Sans titre")[:100]}' for c in data.get('content', [])[:10]])}
+RÈGLES STRICTES :
+- Rédigez UNIQUEMENT en paragraphes narratifs fluides
+- INTERDICTION ABSOLUE de listes à puces, numéros, bullet points
+- INTERDICTION ABSOLUE de mentionner des chiffres, pourcentages, statistiques
+- Décrivez qualitativement les tendances observées
+- Racontez les thèmes principaux comme une histoire
+- Ton professionnel, factuel, style briefing ministériel
+- Ignorez les contenus non pertinents au contexte
 
-Réponse:""",
+Réponse (paragraphes narratifs uniquement) :"""
 
-        "sentiment": f"""Contexte: {context}
+    elif section_name == "sentiment":
+        positive_list = build_content_list(data.get('positive', []), 5)
+        negative_list = build_content_list(data.get('negative', []), 5)
+        neutral_list = build_content_list(data.get('neutral', []), 5)
+        
+        prompt = f"""Contexte : {context}
 
-Données analysées:
-- Contenus positifs: {len(data.get('positive', []))} exemples
-- Contenus négatifs: {len(data.get('negative', []))} exemples  
-- Contenus neutres: {len(data.get('neutral', []))} exemples
+EXEMPLES DE CONTENUS POSITIFS :
+{positive_list}
 
-INSTRUCTION CRITIQUE:
-Rédigez une analyse narrative de 2-4 paragraphes sur les sentiments exprimés dans les discussions.
+EXEMPLES DE CONTENUS CRITIQUES :
+{negative_list}
 
-RÈGLES STRICTES:
-- Rédigez UNIQUEMENT en paragraphes fluides et cohérents
-- N'utilisez JAMAIS de listes à puces, numéros ou bullet points
-- N'incluez AUCUN chiffre, statistique ou pourcentage
-- Décrivez les tonalités observées de manière qualitative
-- Ignorez complètement les données non pertinentes au contexte
+EXEMPLES DE CONTENUS NEUTRES :
+{neutral_list}
 
-Exemples de contenus positifs:
-{chr(10).join([f'- {c.get("title", "")}' for c in data.get('positive', [])[:5]])}
+INSTRUCTION ABSOLUE :
+Rédigez une analyse narrative en 3-4 paragraphes sur les tonalités et sentiments exprimés.
 
-Exemples de contenus négatifs:
-{chr(10).join([f'- {c.get("title", "")}' for c in data.get('negative', [])[:5]])}
+RÈGLES STRICTES :
+- Paragraphes narratifs fluides UNIQUEMENT
+- AUCUN chiffre, pourcentage, statistique
+- Décrivez qualitativement : "majoritairement", "une partie", "certains", etc.
+- Racontez les émotions et réactions observées
+- Ton professionnel et analytique
 
-Réponse:""",
+Réponse :"""
 
-        "influencers": f"""Contexte: {context}
+    elif section_name == "influencers":
+        influencer_list = build_influencer_list(data.get('influencers', []))
+        
+        prompt = f"""Contexte : {context}
 
-Top 5 des auteurs les plus actifs:
-{chr(10).join([f'{i+1}. {inf.get("author")} - Exemples: {", ".join([c.get("title", "")[:50] for c in inf.get("content", [])[:2]])}' 
-              for i, inf in enumerate(data.get('influencers', [])[:5])])}
+PRINCIPAUX ACTEURS IDENTIFIÉS :
+{influencer_list}
 
-INSTRUCTION CRITIQUE:
-Rédigez une analyse narrative de 2-4 paragraphes sur les acteurs clés et leur influence dans les discussions.
+INSTRUCTION ABSOLUE :
+Rédigez une analyse narrative en 3-4 paragraphes sur les acteurs influents et leur rôle.
 
-RÈGLES STRICTES:
-- Rédigez UNIQUEMENT en paragraphes fluides et cohérents
-- N'utilisez JAMAIS de listes à puces, numéros ou bullet points
-- N'incluez AUCUN chiffre, statistique ou pourcentage
-- Décrivez les rôles et l'impact des acteurs de manière qualitative
-- Ignorez complètement les données non pertinentes au contexte
+RÈGLES STRICTES :
+- Paragraphes narratifs fluides UNIQUEMENT
+- AUCUN chiffre ou statistique
+- Décrivez qualitativement leur influence et leur positionnement
+- Racontez leur rôle dans les discussions
+- Ton professionnel
 
-Réponse:""",
+Réponse :"""
 
-        "themes": f"""Contexte: {context}
+    elif section_name == "themes":
+        content_list = build_content_list(data.get('content', []), 20)
+        
+        prompt = f"""Contexte : {context}
 
-Principaux contenus à fort engagement:
-{chr(10).join([f'- {c.get("title", "Sans titre")[:100]}' for c in data.get('content', [])[:15]])}
+CONTENUS À FORT ENGAGEMENT :
+{content_list}
 
-INSTRUCTION CRITIQUE:
-Rédigez une analyse narrative de 2-4 paragraphes sur les thèmes principaux et les préoccupations identifiées.
+INSTRUCTION ABSOLUE :
+Rédigez une analyse narrative en 3-4 paragraphes sur les thèmes principaux identifiés.
 
-RÈGLES STRICTES:
-- Rédigez UNIQUEMENT en paragraphes fluides et cohérents
-- N'utilisez JAMAIS de listes à puces, numéros ou bullet points
-- N'incluez AUCUN chiffre, statistique ou pourcentage
-- Identifiez les sujets récurrents et leur importance
-- Ignorez complètement les données non pertinentes au contexte
+RÈGLES STRICTES :
+- Paragraphes narratifs fluides UNIQUEMENT
+- AUCUN chiffre ou statistique
+- Identifiez et décrivez qualitativement les sujets récurrents
+- Racontez les préoccupations principales
+- Ton professionnel
 
-Réponse:""",
+Réponse :"""
 
-        "recommendations": f"""Contexte: {context}
+    elif section_name == "recommendations":
+        prompt = f"""Contexte : {context}
 
-Observations:
-- Ratio contenus critiques/positifs dans les discussions
-- Préoccupations principales identifiées
+Observations générales sur les discussions analysées.
 
-INSTRUCTION CRITIQUE:
-Rédigez 2-4 paragraphes de recommandations stratégiques basées sur l'analyse.
+INSTRUCTION ABSOLUE :
+Rédigez 3-4 paragraphes de recommandations stratégiques narratives.
 
-RÈGLES STRICTES:
-- Rédigez UNIQUEMENT en paragraphes fluides et cohérents
-- N'utilisez JAMAIS de listes à puces, numéros ou bullet points
-- N'incluez AUCUN chiffre, statistique ou pourcentage
+RÈGLES STRICTES :
+- Paragraphes narratifs fluides UNIQUEMENT
+- AUCUN chiffre ou statistique
 - Proposez des actions concrètes de manière narrative
-- Ton professionnel adapté à un briefing ministériel
+- Ton professionnel, style briefing ministériel
+- Recommandations actionnables
 
-Réponse:"""
-    }
+Réponse :"""
+
+    else:
+        return f"Section {section_name} non configurée."
     
-    prompt = prompts.get(section_name, "")
-    
-    if not prompt:
-        return f"[Section {section_name} non configurée]"
-    
+    # FORCER Groq ou Gemini
     try:
-        # FORCER l'utilisation de Groq/Gemini en priorité
-        services_to_try = []
-        
-        # 1. GROQ en premier (si disponible)
+        # Priorité 1 : GROQ
         if os.getenv("GROQ_API_KEY"):
-            services_to_try.append(("groq", "llama-3.1-70b-versatile"))
             logger.info("🚀 Tentative avec Groq (priorité 1)")
-        
-        # 2. GEMINI en second (si disponible)
-        if os.getenv("GEMINI_API_KEY"):
-            services_to_try.append(("gemini", "gemini-1.5-flash"))
-            logger.info("🌟 Gemini disponible en fallback (priorité 2)")
-        
-        # 3. OLLAMA en dernier recours uniquement
-        services_to_try.append(("ollama", "gemma:2b"))
-        
-        # Essayer les services dans l'ordre de priorité
-        last_error = None
-        for service_name, model in services_to_try:
             try:
-                logger.info(f"🤖 Tentative avec {service_name} ({model})...")
-                
-                response = await ai_service.generate_completion(
+                result = await ai_service.generate(
                     prompt=prompt,
-                    max_tokens=800,
-                    temperature=0.3,  # Factualité maximale
-                    service=service_name,
-                    model=model
+                    max_tokens=1000,
+                    temperature=0.2  # Factualité maximale
                 )
                 
-                if response and len(response.strip()) > 50:
-                    logger.info(f"✅ Section '{section_name}' générée avec {service_name}")
-                    return response.strip()
-                else:
-                    logger.warning(f"⚠️ Réponse vide de {service_name}, passage au suivant")
-                    
+                if result.get('success') and result.get('text'):
+                    text = result['text'].strip()
+                    if len(text) > 100:
+                        logger.info(f"✅ Section '{section_name}' générée avec Groq")
+                        return text
             except Exception as e:
-                last_error = e
-                logger.warning(f"⚠️ Échec avec {service_name}: {str(e)}, passage au suivant")
-                continue
+                logger.warning(f"⚠️ Groq a échoué: {e}")
         
-        # Si tous les services ont échoué
-        raise Exception(f"Tous les services IA ont échoué. Dernière erreur: {last_error}")
+        # Priorité 2 : GEMINI
+        if os.getenv("GEMINI_API_KEY"):
+            logger.info("🌟 Tentative avec Gemini (priorité 2)")
+            try:
+                result = await ai_service.generate(
+                    prompt=prompt,
+                    max_tokens=1000,
+                    temperature=0.2
+                )
+                
+                if result.get('success') and result.get('text'):
+                    text = result['text'].strip()
+                    if len(text) > 100:
+                        logger.info(f"✅ Section '{section_name}' générée avec Gemini")
+                        return text
+            except Exception as e:
+                logger.warning(f"⚠️ Gemini a échoué: {e}")
+        
+        # Dernier recours : Ollama (mais on préfère éviter)
+        logger.warning("⚠️ Fallback vers Ollama (moins optimal)")
+        result = await ai_service.generate(
+            prompt=prompt,
+            max_tokens=1000,
+            temperature=0.2
+        )
+        
+        if result.get('success') and result.get('text'):
+            return result['text'].strip()
+        
+        raise Exception("Tous les services IA ont échoué")
         
     except Exception as e:
         logger.error(f"❌ Erreur génération section {section_name}: {str(e)}")
-        return f"[Impossible de générer la section {section_name}]"
+        return f"Impossible de générer cette section (erreur technique: {str(e)})"
 
 
 @router.post("/generate-narrative")
 async def generate_narrative_report(
-    keyword_ids: List[int] = Query(..., description="Liste des IDs de mots-clés à analyser"),
-    period: str = Query("7d", description="Période d'analyse (7d, 14d, 30d, 90d)"),
-    sections: List[str] = Query(..., description="Sections à inclure dans le rapport"),
+    keyword_ids: List[int] = Query(..., description="Liste des IDs de mots-clés"),
+    period: str = Query("30d", description="Période (7d, 14d, 30d, 90d)"),
+    sections: List[str] = Query(
+        ["summary", "sentiment", "influencers", "themes", "recommendations"],
+        description="Sections à générer"
+    ),
     db: Session = Depends(get_db)
 ):
     """
-    Génère un rapport intelligent narratif avec priorisation Groq/Gemini
-    
-    Sections disponibles:
-    - summary: Résumé exécutif
-    - sentiment: Analyse de sentiment
-    - influencers: Influenceurs et acteurs clés
-    - themes: Thèmes et préoccupations
-    - recommendations: Recommandations stratégiques
+    Génère un rapport narratif pur sans statistiques
+    Priorité : Groq → Gemini → Ollama
     """
     try:
-        logger.info(f"📊 Génération rapport narratif: keywords={keyword_ids}, period={period}")
+        logger.info(f"📊 Génération rapport: keywords={keyword_ids}, period={period}")
         
-        # === ÉTAPE 1: Récupérer le contexte (mots-clés) ===
+        # === ÉTAPE 1: Récupérer contexte ===
         keywords = db.query(Keyword).filter(Keyword.id.in_(keyword_ids)).all()
         
         if not keywords:
@@ -287,7 +306,7 @@ async def generate_narrative_report(
         
         logger.info(f"🎯 Contexte: {context}")
         
-        # === ÉTAPE 2: Récupérer les mentions de la période ===
+        # === ÉTAPE 2: Récupérer mentions ===
         period_days = int(period.replace('d', ''))
         start_date = datetime.now() - timedelta(days=period_days)
         
@@ -296,7 +315,7 @@ async def generate_narrative_report(
             Mention.collected_at >= start_date
         ).all()
         
-        logger.info(f"📥 {len(mentions)} mentions collectées pour la période")
+        logger.info(f"📥 {len(mentions)} mentions brutes collectées")
         
         if len(mentions) == 0:
             raise HTTPException(
@@ -304,71 +323,66 @@ async def generate_narrative_report(
                 detail=f"Aucune mention trouvée pour la période de {period_days} jours"
             )
         
-        # === ÉTAPE 3: Filtrer les mentions pertinentes ===
+        # === ÉTAPE 3: Filtrer contenus pertinents ===
         relevant_mentions = filter_relevant_content(mentions, keyword_texts)
         
         if len(relevant_mentions) == 0:
             raise HTTPException(
                 status_code=404,
-                detail="Aucun contenu pertinent trouvé après filtrage"
+                detail="Aucun contenu pertinent après filtrage"
             )
         
-        # === ÉTAPE 4: Initialiser le service IA (GROQ/GEMINI prioritaire) ===
+        # === ÉTAPE 4: Initialiser service IA ===
         ai_service = get_prioritized_ai_service()
-        available_services = ai_service.get_available_services()
         
-        if not available_services:
-            raise HTTPException(
-                status_code=503,
-                detail="Aucun service IA disponible"
-            )
+        # === ÉTAPE 5: Préparer données pour chaque section ===
+        sample_mentions = relevant_mentions[:100]  # Limiter à 100 pour performance
         
-        # === ÉTAPE 5: Préparer les données pour chaque section ===
-        # Limiter à 50 mentions max pour éviter surcharge
-        sample_mentions = relevant_mentions[:50]
-        
+        # Données résumé
         data_summary = {
             "content": [
                 {
                     "title": m.title or "Sans titre",
-                    "source": m.source,
-                    "author": m.author,
-                    "excerpt": (m.content or "")[:300],
-                    "sentiment": m.sentiment,
-                    "collected_at": m.collected_at.isoformat() if m.collected_at else None
+                    "excerpt": (m.content or "")[:200]
                 }
-                for m in sample_mentions[:10]  # 10 plus représentatives
+                for m in sample_mentions[:20]
             ]
         }
         
+        # Données sentiment
         data_sentiment = {
-            "positive": [{"title": m.title, "excerpt": (m.content or "")[:200]} 
-                        for m in sample_mentions if m.sentiment == "positive"][:5],
-            "negative": [{"title": m.title, "excerpt": (m.content or "")[:200]} 
-                        for m in sample_mentions if m.sentiment == "negative"][:5],
-            "neutral": [{"title": m.title, "excerpt": (m.content or "")[:200]} 
-                       for m in sample_mentions if m.sentiment == "neutral"][:5]
+            "positive": [
+                {"title": m.title, "excerpt": (m.content or "")[:150]} 
+                for m in sample_mentions if m.sentiment == "positive"
+            ][:8],
+            "negative": [
+                {"title": m.title, "excerpt": (m.content or "")[:150]} 
+                for m in sample_mentions if m.sentiment == "negative"
+            ][:8],
+            "neutral": [
+                {"title": m.title, "excerpt": (m.content or "")[:150]} 
+                for m in sample_mentions if m.sentiment == "neutral"
+            ][:8]
         }
         
-        # Top auteurs par nombre de contenus
+        # Données influenceurs
         from collections import Counter
-        author_counts = Counter([m.author for m in sample_mentions if m.author])
+        author_counts = Counter([m.author for m in sample_mentions if m.author and m.author != 'Unknown'])
         data_influencers = {
             "influencers": [
                 {
                     "author": author,
-                    "count": count,
                     "content": [
-                        {"title": m.title, "source": m.source}
+                        {"title": m.title}
                         for m in sample_mentions if m.author == author
                     ][:3]
                 }
-                for author, count in author_counts.most_common(5)
+                for author, _ in author_counts.most_common(8)
             ]
         }
         
-        # Trier par engagement pour identifier les thèmes
-        sorted_by_engagement = sorted(
+        # Données thèmes (contenus à fort engagement)
+        sorted_mentions = sorted(
             sample_mentions,
             key=lambda m: getattr(m, 'engagement_score', 0) or 0,
             reverse=True
@@ -378,22 +392,19 @@ async def generate_narrative_report(
             "content": [
                 {
                     "title": m.title,
-                    "excerpt": (m.content or "")[:200],
-                    "engagement": getattr(m, 'engagement_score', 0)
+                    "excerpt": (m.content or "")[:200]
                 }
-                for m in sorted_by_engagement[:15]
+                for m in sorted_mentions[:25]
             ]
         }
         
-        # Données pour recommandations
-        critical_ratio = len([m for m in sample_mentions if m.sentiment == "negative"]) / max(len(sample_mentions), 1)
+        # Données recommandations
         data_recommendations = {
-            "critical_ratio": critical_ratio,
-            "total_analyzed": len(sample_mentions),
-            "main_concerns": [m.title for m in sorted_by_engagement[:5]]
+            "context": context,
+            "sample_concerns": [m.title for m in sorted_mentions[:10]]
         }
         
-        # === ÉTAPE 6: Générer les sections demandées ===
+        # === ÉTAPE 6: Générer sections ===
         report_sections = {}
         
         section_data_map = {
@@ -406,7 +417,8 @@ async def generate_narrative_report(
         
         for section in sections:
             if section in section_data_map:
-                content = await generate_narrative_section(
+                logger.info(f"📝 Génération section: {section}")
+                content = await generate_narrative_pure(
                     ai_service,
                     section,
                     section_data_map[section],
@@ -414,7 +426,11 @@ async def generate_narrative_report(
                 )
                 report_sections[section] = content
         
-        # === ÉTAPE 7: Compiler le rapport final ===
+        # === ÉTAPE 7: Compiler rapport final ===
+        # Obtenir info sur service utilisé (STRING pas OBJECT)
+        available_services = ai_service.get_available_services()
+        primary_service_label = available_services[0].get("label", "Inconnu") if available_services else "Inconnu"
+        
         report = {
             "metadata": {
                 "title": f"Rapport d'Analyse - {', '.join(keyword_texts)}",
@@ -423,8 +439,8 @@ async def generate_narrative_report(
                 "keywords": keyword_texts,
                 "total_mentions_collected": len(mentions),
                 "relevant_mentions_analyzed": len(relevant_mentions),
-                "ai_services_used": available_services,
-                "classification": "DOCUMENT DE TRAVAIL - DIFFUSION RESTREINTE"
+                "classification": "DOCUMENT DE TRAVAIL - DIFFUSION RESTREINTE",
+                "ai_service_used": primary_service_label  # STRING pas OBJECT
             },
             "sections": report_sections,
             "context": context
@@ -438,4 +454,43 @@ async def generate_narrative_report(
         raise
     except Exception as e:
         logger.error(f"❌ Erreur génération rapport: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/test-ai-services")
+async def test_ai_services():
+    """
+    Tester la disponibilité des services IA
+    """
+    try:
+        ai_service = get_prioritized_ai_service()
+        
+        available = ai_service.get_available_services()
+        
+        # Test rapide
+        test_result = await ai_service.generate(
+            prompt="Réponds simplement 'Service fonctionnel' en un paragraphe.",
+            max_tokens=50,
+            temperature=0.1
+        )
+        
+        return {
+            "services_disponibles": [
+                {
+                    "nom": svc.get("label"),
+                    "priorite": svc.get("priority")
+                }
+                for svc in available
+            ],
+            "service_primaire": available[0].get("label") if available else "Aucun",
+            "test_generation": {
+                "succes": test_result.get('success'),
+                "service_utilise": test_result.get('service'),
+                "reponse": test_result.get('text', '')[:100]
+            }
+        }
+    except Exception as e:
+        logger.error(f"Erreur test services IA: {e}")
         raise HTTPException(status_code=500, detail=str(e))
