@@ -48,6 +48,20 @@ services:
       retries: 5
       start_period: 60s
     restart: unless-stopped
+    
+  # WhatsApp Bridge (Node.js)
+  whatsapp-bridge:
+    build: ./whatsapp-bridge
+    ports:
+      - "3500:3500"
+    volumes:
+      - ./whatsapp-bridge/auth_info:/app/auth_info
+    environment:
+      - PORT=3500
+      - NODE_ENV=production
+    depends_on:
+      - backend
+    restart: unless-stopped
 
   # Backend FastAPI
   backend:

@@ -69,6 +69,10 @@ from app.collectors.collectors_stubs import TelegramCollector
 from app.collectors.collectors_stubs import YouTubeCollector
 from app.collectors.collectors_stubs import RedditCollector
 
+from app.routers import channels
+from app.services.channel_monitor_service import channel_monitor_service
+from app.models_channels import Base as ChannelsBase
+
 from app.routers import report_routes
 sentiment_analyzer = SentimentAnalyzer()
 
@@ -143,6 +147,20 @@ async def startup_event():
             app.include_router(intelligent_report.router)
             logger.info("✅ Routes de rapport intelligent montées")
 
+        # Initialiser les tables channels
+        from app.database import engine
+        ChannelsBase.metadata.create_all(bind=engine)
+        logger.info("✅ Tables channels initialisées")
+        
+        # Démarrer le service de monitoring automatique
+        if settings.ENABLE_AUTO_MONITORING:
+            channel_monitor_service.start()
+            logger.info("✅ Service de monitoring automatique démarré")
+        
+        # Monter les routes channels
+        app.include_router(channels.router)
+        logger.info("✅ Routes channels montées")
+
         # Monter les routes avancées si disponibles
         if ROUTES_ADVANCED_AVAILABLE:
             advanced_router = get_advanced_router()
@@ -167,6 +185,7 @@ async def shutdown_event():
     logger.info("Arrêt de l'application...")
     try:
         stop_scheduler()
+        channel_monitor_service.stop()
         logger.info("✅ Scheduler arrêté")
     except Exception as e:
         logger.error(f"Erreur arrêt: {e}")
