@@ -1,2 +1,5 @@
 .env
 node_modules
+auth_info
+package-lock.json
+fix.sh
