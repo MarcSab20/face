@@ -2,7 +2,7 @@
 Modèles pour le monitoring de channels (YouTube, Telegram, WhatsApp, Pages Web)
 """
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, JSON, Enum as SQLEnum, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -72,7 +72,8 @@ class ChannelItem(Base):
     __tablename__ = "channel_items"
     
     id = Column(Integer, primary_key=True, index=True)
-    channel_id = Column(Integer, nullable=False, index=True)
+    # ✅ CORRECTIF : Ajout de ForeignKey
+    channel_id = Column(Integer, ForeignKey("monitored_channels.id"), nullable=False, index=True)
     
     # Contenu
     title = Column(Text, nullable=False)
@@ -105,7 +106,8 @@ class ChannelMonitorLog(Base):
     __tablename__ = "channel_monitor_logs"
     
     id = Column(Integer, primary_key=True, index=True)
-    channel_id = Column(Integer, nullable=False, index=True)
+    # ✅ CORRECTIF : Ajout de ForeignKey
+    channel_id = Column(Integer, ForeignKey("monitored_channels.id"), nullable=False, index=True)
     
     status = Column(String(20), nullable=False)  # success, error, warning
     items_found = Column(Integer, default=0)

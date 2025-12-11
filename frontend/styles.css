@@ -772,6 +772,23 @@ table tr:hover {
     margin-top: 20px;
 }
 
+/* Styles spécifiques channels */
+.channel-type-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.quick-add-btn {
+    padding: 5px 10px;
+    font-size: 0.85rem;
+}
+
+#channelSchedule {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
 .meta-item {
     display: flex;
     align-items: center;

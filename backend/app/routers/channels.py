@@ -14,7 +14,7 @@ from app.models_channels import (
     ChannelType, AlertPriority
 )
 from app.collectors.invidious_youtube_collector import InvidiousYouTubeCollector
-from app.collectors.telegram_collector_advanced import TelegramCollectorAdvanced
+from app.collectors.telegram_collector import TelegramCollectorAdvanced
 from app.collectors.whatsapp_collector import WhatsAppCollector
 from app.collectors.web_rss_collector import WebRSSCollector
 from app.services.alert_service import alert_service

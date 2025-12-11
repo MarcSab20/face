@@ -248,6 +248,9 @@ const Navigation = {
             case 'mentions':
                 await Mentions.load();
                 break;
+            case 'channels':
+                await Channels.load();
+                break;
             case 'influencers':
                 await Influencers.load();
                 break;
@@ -780,6 +783,790 @@ const Mentions = {
         } catch (error) {
             console.error('Error loading mention details:', error);
         }
+    }
+};
+
+// ============ MODULE CHANNELS ============
+const Channels = {
+    currentChannels: [],
+    charts: {},
+
+    async load() {
+        try {
+            Utils.showLoading('Chargement des channels...');
+
+            // Charger les channels
+            const channels = await Utils.fetchAPI('/api/channels/?active_only=false');
+            this.currentChannels = channels;
+
+            // Mettre à jour les stats
+            this.updateStats(channels);
+
+            // Afficher la liste
+            this.renderChannelsList(channels);
+
+            // Charger le monitoring si on est sur cet onglet
+            const activeTab = document.querySelector('.tab.active[data-tab="channels-monitoring"]');
+            if (activeTab) {
+                await this.loadMonitoring();
+            }
+
+            Utils.hideLoading();
+        } catch (error) {
+            Utils.hideLoading();
+            console.error('Error loading channels:', error);
+        }
+    },
+
+    updateStats(channels) {
+        const activeChannels = channels.filter(ch => ch.active).length;
+        const totalItems = channels.reduce((sum, ch) => sum + (ch.total_items_collected || 0), 0);
+        const alertsActive = channels.filter(ch => ch.enable_email_alerts).length;
+
+        document.getElementById('totalChannels').textContent = Utils.formatNumber(activeChannels);
+        document.getElementById('totalChannelItems').textContent = Utils.formatNumber(totalItems);
+        document.getElementById('channelAlerts').textContent = Utils.formatNumber(alertsActive);
+
+        // Prochaine collecte
+        const nextCheck = channels
+            .filter(ch => ch.active && ch.last_check)
+            .map(ch => {
+                const lastCheck = new Date(ch.last_check);
+                const nextCheck = new Date(lastCheck.getTime() + ch.check_interval_minutes * 60000);
+                return nextCheck;
+            })
+            .sort((a, b) => a - b)[0];
+
+        if (nextCheck) {
+            const now = new Date();
+            const diff = Math.max(0, Math.floor((nextCheck - now) / 60000));
+            document.getElementById('nextChannelCheck').textContent = `${diff}min`;
+        } else {
+            document.getElementById('nextChannelCheck').textContent = '-';
+        }
+    },
+
+    renderChannelsList(channels) {
+        const container = document.getElementById('channelsTable');
+        if (!container) return;
+
+        if (channels.length === 0) {
+            container.innerHTML = `
+                <p style="text-align: center; color: var(--secondary); padding: 40px;">
+                    Aucun channel configuré. Cliquez sur "Nouveau Channel" pour commencer.
+                </p>
+            `;
+            return;
+        }
+
+        const html = `
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nom</th>
+                        <th>Type</th>
+                        <th>Statut</th>
+                        <th>Intervalle</th>
+                        <th>Dernière collecte</th>
+                        <th>Items</th>
+                        <th>Alertes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${channels.map(ch => `
+                        <tr>
+                            <td>
+                                <strong>${ch.name}</strong>
+                                <br>
+                                <small style="color: var(--secondary);">${this.formatChannelId(ch.channel_id)}</small>
+                            </td>
+                            <td>${this.getChannelTypeBadge(ch.channel_type)}</td>
+                            <td>${ch.active ? '<span class="badge success">Actif</span>' : '<span class="badge">Inactif</span>'}</td>
+                            <td>${ch.check_interval_minutes} min</td>
+                            <td>${Utils.formatDate(ch.last_check) || 'Jamais'}</td>
+                            <td>${Utils.formatNumber(ch.total_items_collected || 0)}</td>
+                            <td>${ch.enable_email_alerts ? '🔔' : '🔕'}</td>
+                            <td>
+                                <button class="btn-icon-small" onclick="Channels.viewChannel(${ch.id})" title="Voir">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn-icon-small" onclick="Channels.collectChannel(${ch.id})" title="Collecter">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                                <button class="btn-icon-small" onclick="Channels.editChannel(${ch.id})" title="Éditer">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-icon-small" onclick="Channels.deleteChannel(${ch.id})" title="Supprimer">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+
+        container.innerHTML = html;
+    },
+
+    getChannelTypeBadge(type) {
+        const badges = {
+            'youtube_rss': '<span class="badge danger"><i class="fab fa-youtube"></i> YouTube</span>',
+            'telegram': '<span class="badge info"><i class="fab fa-telegram"></i> Telegram</span>',
+            'whatsapp': '<span class="badge success"><i class="fab fa-whatsapp"></i> WhatsApp</span>',
+            'web_rss': '<span class="badge warning"><i class="fas fa-rss"></i> RSS</span>'
+        };
+        return badges[type] || `<span class="badge">${type}</span>`;
+    },
+
+    formatChannelId(channelId) {
+        if (channelId.length > 50) {
+            return channelId.substring(0, 47) + '...';
+        }
+        return channelId;
+    },
+
+    showAddChannelModal() {
+        const modalBody = `
+            <form id="addChannelForm">
+                <div class="form-group">
+                    <label>Type de Channel *</label>
+                    <select id="channelType" class="form-control" required onchange="Channels.updateChannelForm()">
+                        <option value="">-- Sélectionner --</option>
+                        <option value="youtube_rss">📺 YouTube (RSS)</option>
+                        <option value="telegram">✈️ Telegram</option>
+                        <option value="whatsapp">💬 WhatsApp</option>
+                        <option value="web_rss">🌐 Flux RSS</option>
+                    </select>
+                </div>
+
+                <div id="channelSpecificFields"></div>
+
+                <div class="form-group">
+                    <label>Nom du channel *</label>
+                    <input type="text" id="channelName" class="form-control" placeholder="Ex: France 24 Afrique" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Intervalle de collecte (minutes) *</label>
+                    <input type="number" id="channelInterval" class="form-control" value="60" min="5" max="1440" required>
+                    <small>Entre 5 et 1440 minutes (24h)</small>
+                </div>
+
+                <div class="form-group">
+                    <label class="checkbox">
+                        <input type="checkbox" id="enableAlerts">
+                        <span>Activer les alertes email</span>
+                    </label>
+                </div>
+
+                <div id="alertFields" style="display: none;">
+                    <div class="form-group">
+                        <label>Mots-clés d'alerte (séparés par des virgules)</label>
+                        <input type="text" id="alertKeywords" class="form-control" placeholder="urgent, breaking, important">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Emails de notification (séparés par des virgules)</label>
+                        <input type="text" id="alertEmails" class="form-control" placeholder="admin@example.com">
+                    </div>
+                </div>
+
+                <div class="form-group full-width">
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <i class="fas fa-plus"></i>
+                        Créer le Channel
+                    </button>
+                </div>
+            </form>
+        `;
+
+        Modal.show('Nouveau Channel', modalBody);
+
+        // Gérer l'affichage des champs d'alerte
+        document.getElementById('enableAlerts').addEventListener('change', (e) => {
+            document.getElementById('alertFields').style.display = e.target.checked ? 'block' : 'none';
+        });
+
+        document.getElementById('addChannelForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.createChannel();
+        });
+    },
+
+    updateChannelForm() {
+        const type = document.getElementById('channelType').value;
+        const container = document.getElementById('channelSpecificFields');
+
+        if (!type) {
+            container.innerHTML = '';
+            return;
+        }
+
+        let html = '';
+
+        switch (type) {
+            case 'youtube_rss':
+                html = `
+                    <div class="form-group">
+                        <label>ID de la chaîne YouTube *</label>
+                        <input type="text" id="channelId" class="form-control" 
+                               placeholder="UCXuqSBlHAE6Xw-yeJA0Tunw" required>
+                        <small>
+                            Trouvez l'ID dans l'URL : youtube.com/channel/<strong>ID_ICI</strong><br>
+                            Ou utilisez la recherche ci-dessous
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <label>Ou rechercher par nom</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="youtubeSearch" class="form-control" placeholder="France 24">
+                            <button type="button" class="btn btn-secondary" onclick="Channels.searchYouTube()">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                        <div id="youtubeSearchResults"></div>
+                    </div>
+                `;
+                break;
+
+            case 'telegram':
+                html = `
+                    <div class="form-group">
+                        <label>Username du canal Telegram *</label>
+                        <input type="text" id="channelId" class="form-control" 
+                               placeholder="@france24_fr" required>
+                        <small>Format : @username ou simplement username</small>
+                    </div>
+                `;
+                break;
+
+            case 'whatsapp':
+                html = `
+                    <div class="form-group">
+                        <label>ID du groupe WhatsApp *</label>
+                        <input type="text" id="channelId" class="form-control" 
+                               placeholder="120363xxx@g.us" required>
+                        <small>
+                            Format : numéro@g.us<br>
+                            ⚠️ WhatsApp Bridge doit être connecté
+                        </small>
+                    </div>
+                    <div class="form-group">
+                        <button type="button" class="btn btn-secondary btn-block" onclick="Channels.checkWhatsAppStatus()">
+                            <i class="fas fa-info-circle"></i>
+                            Vérifier WhatsApp Bridge
+                        </button>
+                    </div>
+                `;
+                break;
+
+            case 'web_rss':
+                html = `
+                    <div class="form-group">
+                        <label>URL du flux RSS *</label>
+                        <input type="text" id="channelId" class="form-control" 
+                               placeholder="https://www.france24.com/fr/rss" required>
+                        <small>URL complète du flux RSS/Atom</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Ou découvrir automatiquement</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="websiteUrl" class="form-control" placeholder="https://www.france24.com">
+                            <button type="button" class="btn btn-secondary" onclick="Channels.discoverRSS()">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                        <div id="rssDiscoverResults"></div>
+                    </div>
+                `;
+                break;
+        }
+
+        container.innerHTML = html;
+    },
+
+    async searchYouTube() {
+        const query = document.getElementById('youtubeSearch').value.trim();
+        if (!query) {
+            Utils.showError('Entrez un terme de recherche');
+            return;
+        }
+
+        try {
+            Utils.showLoading('Recherche YouTube...');
+            const result = await Utils.fetchAPI(`/api/channels/discover/youtube?search=${encodeURIComponent(query)}`);
+            Utils.hideLoading();
+
+            const resultsDiv = document.getElementById('youtubeSearchResults');
+            
+            if (result.found && result.info) {
+                resultsDiv.innerHTML = `
+                    <div style="margin-top: 10px; padding: 10px; background: var(--light); border-radius: 5px;">
+                        <strong>${result.info.title || 'Chaîne trouvée'}</strong><br>
+                        <small>ID: ${result.channel_id}</small><br>
+                        <button type="button" class="btn btn-primary" style="margin-top: 10px;" 
+                                onclick="document.getElementById('channelId').value='${result.channel_id}'; 
+                                         document.getElementById('channelName').value='${(result.info.title || '').replace(/'/g, "\\'")}';
+                                         document.getElementById('youtubeSearchResults').innerHTML='';">
+                            <i class="fas fa-check"></i> Utiliser cette chaîne
+                        </button>
+                    </div>
+                `;
+            } else {
+                resultsDiv.innerHTML = '<p style="color: var(--danger); margin-top: 10px;">Aucun résultat trouvé</p>';
+            }
+        } catch (error) {
+            Utils.hideLoading();
+        }
+    },
+
+    async discoverRSS() {
+        const url = document.getElementById('websiteUrl').value.trim();
+        if (!url) {
+            Utils.showError('Entrez une URL');
+            return;
+        }
+
+        try {
+            Utils.showLoading('Recherche du flux RSS...');
+            const result = await Utils.fetchAPI(`/api/channels/discover/rss?website_url=${encodeURIComponent(url)}`);
+            Utils.hideLoading();
+
+            const resultsDiv = document.getElementById('rssDiscoverResults');
+            
+            if (result.found) {
+                resultsDiv.innerHTML = `
+                    <div style="margin-top: 10px; padding: 10px; background: var(--light); border-radius: 5px;">
+                        <strong>Flux RSS découvert !</strong><br>
+                        <small>${result.feed_url}</small><br>
+                        <button type="button" class="btn btn-primary" style="margin-top: 10px;" 
+                                onclick="document.getElementById('channelId').value='${result.feed_url}'; 
+                                         document.getElementById('rssDiscoverResults').innerHTML='';">
+                            <i class="fas fa-check"></i> Utiliser ce flux
+                        </button>
+                    </div>
+                `;
+            } else {
+                resultsDiv.innerHTML = '<p style="color: var(--danger); margin-top: 10px;">Aucun flux RSS trouvé</p>';
+            }
+        } catch (error) {
+            Utils.hideLoading();
+        }
+    },
+
+    async checkWhatsAppStatus() {
+        try {
+            Utils.showLoading('Vérification WhatsApp Bridge...');
+            
+            // Essayer de contacter le bridge WhatsApp (port 3500)
+            const response = await fetch('http://localhost:3500/health');
+            const data = await response.json();
+            
+            Utils.hideLoading();
+
+            if (data.connection_state === 'connected') {
+                Utils.showSuccess('✅ WhatsApp Bridge connecté');
+                
+                // Charger les groupes
+                const groupsResponse = await fetch('http://localhost:3500/groups');
+                const groupsData = await groupsResponse.json();
+                
+                if (groupsData.groups && groupsData.groups.length > 0) {
+                    const select = document.createElement('select');
+                    select.className = 'form-control';
+                    select.style.marginTop = '10px';
+                    
+                    groupsData.groups.forEach(group => {
+                        const option = document.createElement('option');
+                        option.value = group.id;
+                        option.textContent = `${group.name} (${group.participants_count} membres)`;
+                        select.appendChild(option);
+                    });
+                    
+                    select.addEventListener('change', () => {
+                        document.getElementById('channelId').value = select.value;
+                    });
+                    
+                    document.getElementById('channelId').parentElement.appendChild(select);
+                }
+            } else {
+                Utils.showError(`WhatsApp Bridge: ${data.connection_state}`);
+            }
+        } catch (error) {
+            Utils.hideLoading();
+            Utils.showError('WhatsApp Bridge non accessible. Assurez-vous qu\'il est démarré.');
+        }
+    },
+
+    async createChannel() {
+        const type = document.getElementById('channelType').value;
+        const channelId = document.getElementById('channelId').value.trim();
+        const name = document.getElementById('channelName').value.trim();
+        const interval = parseInt(document.getElementById('channelInterval').value);
+        const enableAlerts = document.getElementById('enableAlerts').checked;
+
+        if (!type || !channelId || !name) {
+            Utils.showError('Tous les champs obligatoires doivent être remplis');
+            return;
+        }
+
+        const data = {
+            name: name,
+            channel_type: type,
+            channel_id: channelId,
+            check_interval_minutes: interval,
+            enable_email_alerts: enableAlerts
+        };
+
+        if (enableAlerts) {
+            const keywords = document.getElementById('alertKeywords').value.trim();
+            const emails = document.getElementById('alertEmails').value.trim();
+            
+            if (keywords) {
+                data.alert_keywords = keywords.split(',').map(k => k.trim()).filter(k => k);
+            }
+            if (emails) {
+                data.alert_emails = emails.split(',').map(e => e.trim()).filter(e => e);
+            }
+        }
+
+        try {
+            Utils.showLoading('Création du channel...');
+            await Utils.fetchAPI('/api/channels/', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+            Utils.hideLoading();
+            Modal.hide();
+            Utils.showSuccess('Channel créé avec succès');
+            this.load();
+        } catch (error) {
+            Utils.hideLoading();
+        }
+    },
+
+    async collectChannel(channelId) {
+        try {
+            Utils.showLoading('Collecte en cours...');
+            await Utils.fetchAPI(`/api/channels/${channelId}/collect`, {
+                method: 'POST'
+            });
+            Utils.hideLoading();
+            Utils.showSuccess('Collecte lancée avec succès');
+            setTimeout(() => this.load(), 2000);
+        } catch (error) {
+            Utils.hideLoading();
+        }
+    },
+
+    async collectAllChannels() {
+        try {
+            Utils.showLoading('Collecte de tous les channels...');
+            await Utils.fetchAPI('/api/channels/collect-all', {
+                method: 'POST'
+            });
+            Utils.hideLoading();
+            Utils.showSuccess('Collecte lancée pour tous les channels actifs');
+            setTimeout(() => this.load(), 3000);
+        } catch (error) {
+            Utils.hideLoading();
+        }
+    },
+
+    async viewChannel(channelId) {
+        try {
+            Utils.showLoading('Chargement des détails...');
+            const channel = await Utils.fetchAPI(`/api/channels/${channelId}`);
+            const stats = await Utils.fetchAPI(`/api/channels/${channelId}/stats?days=7`);
+            const items = await Utils.fetchAPI(`/api/channels/${channelId}/items?limit=20`);
+            Utils.hideLoading();
+
+            const modalBody = `
+                <div style="max-height: 70vh; overflow-y: auto;">
+                    <div class="card" style="margin-bottom: 20px;">
+                        <div class="card-header">
+                            <h4>Informations du Channel</h4>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Nom:</strong> ${channel.name}</p>
+                            <p><strong>Type:</strong> ${this.getChannelTypeBadge(channel.channel_type)}</p>
+                            <p><strong>ID:</strong> <code>${channel.channel_id}</code></p>
+                            <p><strong>Statut:</strong> ${channel.active ? '<span class="badge success">Actif</span>' : '<span class="badge">Inactif</span>'}</p>
+                            <p><strong>Intervalle:</strong> ${channel.check_interval_minutes} minutes</p>
+                            <p><strong>Alertes:</strong> ${channel.enable_email_alerts ? '🔔 Activées' : '🔕 Désactivées'}</p>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-bottom: 20px;">
+                        <div class="card-header">
+                            <h4>Statistiques (7 derniers jours)</h4>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Items collectés:</strong> ${stats.stats.total_items}</p>
+                            <p><strong>Alertes déclenchées:</strong> ${stats.stats.alert_items}</p>
+                            <p><strong>Dernière collecte:</strong> ${Utils.formatDate(stats.stats.last_check) || 'Jamais'}</p>
+                            ${stats.stats.sentiment_distribution ? `
+                                <p><strong>Sentiments:</strong></p>
+                                <ul>
+                                    <li>Positif: ${stats.stats.sentiment_distribution.positive || 0}</li>
+                                    <li>Neutre: ${stats.stats.sentiment_distribution.neutral || 0}</li>
+                                    <li>Négatif: ${stats.stats.sentiment_distribution.negative || 0}</li>
+                                </ul>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h4>Contenus Récents (${items.items.length})</h4>
+                        </div>
+                        <div class="card-body">
+                            ${items.items.length > 0 ? `
+                                ${items.items.map(item => `
+                                    <div style="padding: 10px 0; border-bottom: 1px solid var(--border);">
+                                        <p style="font-weight: 500;">${item.title}</p>
+                                        <div style="display: flex; gap: 15px; margin-top: 5px;">
+                                            <small>${Utils.formatDate(item.published_at)}</small>
+                                            <small>${item.sentiment ? Utils.getSentimentBadge(item.sentiment) : ''}</small>
+                                            ${item.alert_triggered ? '<small>🔔 Alerte</small>' : ''}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            ` : '<p style="color: var(--secondary);">Aucun contenu collecté</p>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            Modal.show(`Channel: ${channel.name}`, modalBody);
+        } catch (error) {
+            Utils.hideLoading();
+        }
+    },
+
+    async deleteChannel(channelId) {
+        if (!confirm('Êtes-vous sûr de vouloir supprimer ce channel ?')) {
+            return;
+        }
+
+        try {
+            await Utils.fetchAPI(`/api/channels/${channelId}`, {
+                method: 'DELETE'
+            });
+            Utils.showSuccess('Channel supprimé');
+            this.load();
+        } catch (error) {
+            console.error('Error deleting channel:', error);
+        }
+    },
+
+    async editChannel(channelId) {
+        try {
+            const channel = await Utils.fetchAPI(`/api/channels/${channelId}`);
+            
+            const modalBody = `
+                <form id="editChannelForm">
+                    <div class="form-group">
+                        <label>Nom du channel *</label>
+                        <input type="text" id="editChannelName" class="form-control" value="${channel.name}" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Intervalle (minutes) *</label>
+                        <input type="number" id="editChannelInterval" class="form-control" 
+                               value="${channel.check_interval_minutes}" min="5" max="1440" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox">
+                            <input type="checkbox" id="editChannelActive" ${channel.active ? 'checked' : ''}>
+                            <span>Channel actif</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="checkbox">
+                            <input type="checkbox" id="editEnableAlerts" ${channel.enable_email_alerts ? 'checked' : ''}>
+                            <span>Activer les alertes email</span>
+                        </label>
+                    </div>
+
+                    <div class="form-group full-width">
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <i class="fas fa-save"></i>
+                            Enregistrer
+                        </button>
+                    </div>
+                </form>
+            `;
+
+            Modal.show(`Éditer: ${channel.name}`, modalBody);
+
+            document.getElementById('editChannelForm').addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const data = {
+                    name: document.getElementById('editChannelName').value.trim(),
+                    check_interval_minutes: parseInt(document.getElementById('editChannelInterval').value),
+                    active: document.getElementById('editChannelActive').checked,
+                    enable_email_alerts: document.getElementById('editEnableAlerts').checked
+                };
+
+                try {
+                    Utils.showLoading('Mise à jour...');
+                    await Utils.fetchAPI(`/api/channels/${channelId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(data)
+                    });
+                    Utils.hideLoading();
+                    Modal.hide();
+                    Utils.showSuccess('Channel mis à jour');
+                    this.load();
+                } catch (error) {
+                    Utils.hideLoading();
+                }
+            });
+        } catch (error) {
+            console.error('Error loading channel:', error);
+        }
+    },
+
+    async loadMonitoring() {
+        try {
+            // Charger le planning de collecte
+            const schedule = await Utils.fetchAPI('/api/channels/monitoring/schedule');
+            this.renderSchedule(schedule);
+
+            // Charger les stats d'activité
+            // TODO: Créer un graphique d'activité si endpoint disponible
+        } catch (error) {
+            console.error('Error loading monitoring:', error);
+        }
+    },
+
+    renderSchedule(schedule) {
+        const container = document.getElementById('channelSchedule');
+        if (!container) return;
+
+        if (!schedule.channels || schedule.channels.length === 0) {
+            container.innerHTML = '<p style="color: var(--secondary);">Aucun channel actif</p>';
+            return;
+        }
+
+        const html = Object.entries(schedule.channels)
+            .sort((a, b) => {
+                const dateA = new Date(a[1].next_check);
+                const dateB = new Date(b[1].next_check);
+                return dateA - dateB;
+            })
+            .map(([name, info]) => {
+                const nextCheck = new Date(info.next_check);
+                const now = new Date();
+                const isImmediate = info.next_check === 'Immédiat';
+                const isOverdue = !isImmediate && nextCheck < now;
+
+                return `
+                    <div style="padding: 10px; margin-bottom: 10px; background: var(--light); border-radius: 5px;">
+                        <strong>${name}</strong><br>
+                        <small>
+                            Dernière: ${info.last_check ? Utils.formatDate(info.last_check) : 'Jamais'}<br>
+                            Prochaine: <span style="color: ${isOverdue ? 'var(--danger)' : 'var(--primary)'};">
+                                ${isImmediate ? 'Immédiat' : Utils.formatDate(info.next_check)}
+                            </span><br>
+                            Intervalle: ${info.interval_minutes}min
+                        </small>
+                    </div>
+                `;
+            })
+            .join('');
+
+        container.innerHTML = html;
+    },
+
+    async loadPopularChannels() {
+        try {
+            const presets = await Utils.fetchAPI('/api/channels/presets/popular');
+            this.renderPopularChannels(presets);
+        } catch (error) {
+            console.error('Error loading popular channels:', error);
+        }
+    },
+
+    renderPopularChannels(presets) {
+        const container = document.getElementById('popularChannelsGrid');
+        if (!container) return;
+
+        const html = Object.entries(presets).map(([category, channels]) => `
+            <div class="card" style="margin-bottom: 20px;">
+                <div class="card-header">
+                    <h3>${category.replace(/_/g, ' ').toUpperCase()}</h3>
+                </div>
+                <div class="card-body">
+                    ${channels.map(ch => `
+                        <div style="padding: 10px; margin-bottom: 10px; background: var(--light); border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong>${ch.name}</strong><br>
+                                <small>${ch.channel_id}</small>
+                                ${ch.description ? `<br><small style="color: var(--secondary);">${ch.description}</small>` : ''}
+                            </div>
+                            <button class="btn btn-primary" onclick='Channels.quickAddChannel(${JSON.stringify(ch)})'>
+                                <i class="fas fa-plus"></i>
+                                Ajouter
+                            </button>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `).join('');
+
+        container.innerHTML = html;
+    },
+
+    async quickAddChannel(channelData) {
+        const name = prompt(`Nom du channel:`, channelData.name);
+        if (!name) return;
+
+        const data = {
+            name: name,
+            channel_type: channelData.type,
+            channel_id: channelData.channel_id,
+            check_interval_minutes: 60,
+            enable_email_alerts: false
+        };
+
+        try {
+            Utils.showLoading('Ajout du channel...');
+            await Utils.fetchAPI('/api/channels/', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            });
+            Utils.hideLoading();
+            Utils.showSuccess('Channel ajouté avec succès');
+            this.load();
+        } catch (error) {
+            Utils.hideLoading();
+        }
+    },
+
+    applyFilters() {
+        const typeFilter = document.getElementById('channelTypeFilter').value;
+        const statusFilter = document.getElementById('channelStatusFilter').value;
+
+        let filtered = this.currentChannels;
+
+        if (typeFilter) {
+            filtered = filtered.filter(ch => ch.channel_type === typeFilter);
+        }
+
+        if (statusFilter === 'active') {
+            filtered = filtered.filter(ch => ch.active);
+        } else if (statusFilter === 'inactive') {
+            filtered = filtered.filter(ch => !ch.active);
+        }
+
+        this.renderChannelsList(filtered);
     }
 };
 
@@ -1738,6 +2525,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('refreshInfluencersBtn')?.addEventListener('click', () => {
         Influencers.load();
+    });
+
+    // Boutons Channels
+    document.getElementById('addChannelBtn')?.addEventListener('click', () => {
+        Channels.showAddChannelModal();
+    });
+
+    document.getElementById('refreshChannelsBtn')?.addEventListener('click', () => {
+        Channels.load();
+    });
+
+    document.getElementById('collectAllChannelsBtn')?.addEventListener('click', () => {
+        Channels.collectAllChannels();
+    });
+
+    document.getElementById('applyChannelFilters')?.addEventListener('click', () => {
+        Channels.applyFilters();
+    });
+
+    // Gérer les tabs channels
+    document.querySelectorAll('.tab[data-tab^="channels-"]').forEach(tab => {
+        tab.addEventListener('click', async () => {
+            const tabName = tab.dataset.tab;
+            if (tabName === 'channels-monitoring') {
+                await Channels.loadMonitoring();
+            } else if (tabName === 'channels-presets') {
+                await Channels.loadPopularChannels();
+            }
+        });
     });
 
     // Test des services IA

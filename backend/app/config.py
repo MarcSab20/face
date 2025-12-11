@@ -205,7 +205,8 @@ class Settings(BaseSettings):
     
     # ===== MONITORING =====
     ENABLE_PROMETHEUS: bool = Field(default=True, env="ENABLE_PROMETHEUS")
-    
+    ENABLE_AUTO_MONITORING: bool = True
+    AUTO_MONITORING_INTERVAL: int = 5
     # ===== PDF GENERATION =====
     REPORT_DEFAULT_LANGUAGE: str = Field(default="fr", env="REPORT_DEFAULT_LANGUAGE")
     REPORT_DATE_FORMAT: str = Field(default="%d/%m/%Y", env="REPORT_DATE_FORMAT")

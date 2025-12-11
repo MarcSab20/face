@@ -29,6 +29,10 @@
                 <i class="fas fa-comments"></i>
                 <span>Mentions</span>
             </a>
+            <a href="#" class="nav-item" data-view="channels">
+                <i class="fas fa-broadcast-tower"></i>
+                <span>Channels</span>
+            </a>
             <a href="#" class="nav-item" data-view="influencers">
                 <i class="fas fa-users"></i>
                 <span>Influenceurs</span>
@@ -199,6 +203,152 @@
                     <div class="card-body">
                         <div id="keywordsTable"></div>
                     </div>
+                </div>
+            </div>
+
+            <!-- CHANNELS VIEW -->
+            <div id="channels-view" class="view">
+                <div class="view-header">
+                    <div class="view-header-left">
+                        <h2>Surveillance de Channels</h2>
+                        <p>Suivi automatique de chaînes YouTube, groupes WhatsApp, Telegram et flux RSS</p>
+                    </div>
+                    <div class="view-header-right">
+                        <button class="btn btn-secondary" id="refreshChannelsBtn">
+                            <i class="fas fa-sync-alt"></i>
+                            Actualiser
+                        </button>
+                        <button class="btn btn-primary" id="addChannelBtn">
+                            <i class="fas fa-plus"></i>
+                            Nouveau Channel
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Statistiques globales -->
+                <div class="stats-grid" style="margin-bottom: 30px;">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <i class="fas fa-broadcast-tower"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalChannels">-</h3>
+                            <p>Channels actifs</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <i class="fas fa-file-alt"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalChannelItems">-</h3>
+                            <p>Contenus collectés</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="nextChannelCheck">-</h3>
+                            <p>Prochaine collecte</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">
+                            <i class="fas fa-bell"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="channelAlerts">-</h3>
+                            <p>Alertes actives</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filtres par type -->
+                <div class="filters-bar">
+                    <div class="filter-group">
+                        <label>Type de channel</label>
+                        <select id="channelTypeFilter" class="form-control">
+                            <option value="">Tous</option>
+                            <option value="youtube_rss">YouTube</option>
+                            <option value="telegram">Telegram</option>
+                            <option value="whatsapp">WhatsApp</option>
+                            <option value="web_rss">Flux RSS</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Statut</label>
+                        <select id="channelStatusFilter" class="form-control">
+                            <option value="">Tous</option>
+                            <option value="active">Actifs</option>
+                            <option value="inactive">Inactifs</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-secondary" id="applyChannelFilters">
+                        <i class="fas fa-filter"></i>
+                        Appliquer
+                    </button>
+                    <button class="btn btn-primary" id="collectAllChannelsBtn" style="margin-left: auto;">
+                        <i class="fas fa-play"></i>
+                        Tout Collecter
+                    </button>
+                </div>
+
+                <!-- Tabs pour organisation -->
+                <div class="tabs">
+                    <button class="tab active" data-tab="channels-list">
+                        <i class="fas fa-list"></i>
+                        Liste des Channels
+                    </button>
+                    <button class="tab" data-tab="channels-monitoring">
+                        <i class="fas fa-chart-line"></i>
+                        Monitoring
+                    </button>
+                    <button class="tab" data-tab="channels-presets">
+                        <i class="fas fa-star"></i>
+                        Channels Populaires
+                    </button>
+                </div>
+
+                <!-- TAB: Liste des channels -->
+                <div class="tab-content active" data-content="channels-list">
+                    <div class="card">
+                        <div class="card-body">
+                            <div id="channelsTable">
+                                <p style="text-align: center; color: var(--secondary); padding: 40px;">
+                                    Chargement des channels...
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: Monitoring -->
+                <div class="tab-content" data-content="channels-monitoring">
+                    <div class="dashboard-grid">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Planning de Collecte</h3>
+                            </div>
+                            <div class="card-body">
+                                <div id="channelSchedule"></div>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>Activité Récente</h3>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="channelActivityChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB: Channels populaires -->
+                <div class="tab-content" data-content="channels-presets">
+                    <div id="popularChannelsGrid"></div>
                 </div>
             </div>
 
@@ -390,8 +540,6 @@
                 </div>
             </div>
 
-            <!-- REPORTS VIEW -->
-            <!-- REPORTS VIEW -->
             <!-- REPORTS VIEW -->
             <div id="reports-view" class="view">
                 <div class="view-header">
